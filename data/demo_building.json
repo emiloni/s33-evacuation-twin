@@ -1,0 +1,138 @@
+{
+  "building": {
+    "id": "B1",
+    "name": "S33 Demo Building",
+    "floors": 1
+  },
+  "nodes": [
+    {
+      "id": "N1",
+      "x": 100,
+      "y": 100,
+      "type": "room",
+      "floor": 1,
+      "label": "Room 101"
+    },
+    {
+      "id": "N2",
+      "x": 250,
+      "y": 100,
+      "type": "corridor",
+      "floor": 1,
+      "label": "North Corridor"
+    },
+    {
+      "id": "N3",
+      "x": 400,
+      "y": 100,
+      "type": "corridor",
+      "floor": 1,
+      "label": "North Corridor 2"
+    },
+    {
+      "id": "N4",
+      "x": 100,
+      "y": 250,
+      "type": "corridor",
+      "floor": 1,
+      "label": "South Corridor"
+    },
+    {
+      "id": "N5",
+      "x": 250,
+      "y": 250,
+      "type": "corridor",
+      "floor": 1,
+      "label": "South Corridor 2"
+    },
+    {
+      "id": "N6",
+      "x": 400,
+      "y": 250,
+      "type": "corridor",
+      "floor": 1,
+      "label": "East Corridor"
+    },
+    {
+      "id": "EXIT1",
+      "x": 400,
+      "y": 400,
+      "type": "exit",
+      "floor": 1,
+      "label": "Main Exit"
+    },
+    {
+      "id": "EXIT2",
+      "x": 100,
+      "y": 400,
+      "type": "exit",
+      "floor": 1,
+      "label": "South Exit"
+    }
+  ],
+  "edges": [
+    {
+      "from": "N1",
+      "to": "N2",
+      "weight": 1,
+      "type": "corridor",
+      "accessible": true
+    },
+    {
+      "from": "N2",
+      "to": "N3",
+      "weight": 1,
+      "type": "corridor",
+      "accessible": true
+    },
+    {
+      "from": "N1",
+      "to": "N4",
+      "weight": 2,
+      "type": "corridor",
+      "accessible": true
+    },
+    {
+      "from": "N4",
+      "to": "N5",
+      "weight": 2,
+      "type": "corridor",
+      "accessible": true
+    },
+    {
+      "from": "N5",
+      "to": "N6",
+      "weight": 1,
+      "type": "corridor",
+      "accessible": true
+    },
+    {
+      "from": "N3",
+      "to": "N6",
+      "weight": 2,
+      "type": "corridor",
+      "accessible": true
+    },
+    {
+      "from": "N2",
+      "to": "N5",
+      "weight": 1,
+      "type": "stairs",
+      "accessible": false
+    },
+    {
+      "from": "N6",
+      "to": "EXIT1",
+      "weight": 1,
+      "type": "corridor",
+      "accessible": true
+    },
+    {
+      "from": "N4",
+      "to": "EXIT2",
+      "weight": 4,
+      "type": "corridor",
+      "accessible": true
+    }
+  ]
+}

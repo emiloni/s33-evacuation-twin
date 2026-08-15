@@ -21,7 +21,10 @@ def detect_hazards(
         hazard_type = None
         severity = None
 
-        # Temperature threshold
+        # --------------------------------------------------
+        # Temperature → fire
+        # --------------------------------------------------
+
         if (
             sensor_type == "temperature"
             and value >= 50
@@ -29,7 +32,10 @@ def detect_hazards(
             hazard_type = "fire"
             severity = "high"
 
-        # Smoke threshold
+        # --------------------------------------------------
+        # Smoke → fire
+        # --------------------------------------------------
+
         elif (
             sensor_type == "smoke"
             and value >= 30
@@ -37,7 +43,10 @@ def detect_hazards(
             hazard_type = "fire"
             severity = "high"
 
-        # Closed exit
+        # --------------------------------------------------
+        # Door → closed exit
+        # --------------------------------------------------
+
         elif (
             sensor_type == "door"
             and value == "closed"
@@ -50,10 +59,13 @@ def detect_hazards(
 
         blocked_nodes.add(location)
 
-        key = (hazard_type, location)
+        key = (
+            hazard_type,
+            location,
+        )
 
-        # Keep only one hazard record.
         if key not in hazard_map:
+
             hazard_map[key] = {
                 "type": hazard_type,
                 "location": location,
@@ -67,5 +79,7 @@ def detect_hazards(
 
     return {
         "blocked_nodes": blocked_nodes,
-        "hazards": list(hazard_map.values()),
+        "hazards": list(
+            hazard_map.values()
+        ),
     }

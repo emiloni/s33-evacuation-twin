@@ -1,8 +1,10 @@
-import networkx as nx
 from typing import Optional, Set
+
+import networkx as nx
 
 from .graph import build_graph
 from .constraints import edge_allowed
+from .exits import find_best_exit
 
 
 def find_route(
@@ -15,27 +17,36 @@ def find_route(
 
     blocked_nodes = blocked_nodes or set()
 
-    # Remove hazardous/blocked nodes.
-    graph.remove_nodes_from(blocked_nodes)
+    graph.remove_nodes_from(
+        blocked_nodes
+    )
 
-    # Remove edges that violate mobility constraints.
     blocked_edges = []
 
-    for u, v, data in graph.edges(data=True):
+    for u, v, data in graph.edges(
+        data=True
+    ):
+
         if not edge_allowed(
             data,
             mobility,
             blocked_nodes,
         ):
-            blocked_edges.append((u, v))
+            blocked_edges.append(
+                (u, v)
+            )
 
-    graph.remove_edges_from(blocked_edges)
+    graph.remove_edges_from(
+        blocked_edges
+    )
 
-    # Start or destination itself is unavailable.
     if start in blocked_nodes:
         return {
             "success": False,
-            "error": "Starting location is unavailable",
+            "error": (
+                "Starting location "
+                "is unavailable"
+            ),
             "path": [],
             "distance": None,
         }
@@ -43,12 +54,15 @@ def find_route(
     if destination in blocked_nodes:
         return {
             "success": False,
-            "error": "Destination is unavailable",
+            "error": (
+                "Destination is unavailable"
+            ),
             "path": [],
             "distance": None,
         }
 
     try:
+
         path = nx.dijkstra_path(
             graph,
             start,
@@ -82,46 +96,72 @@ def find_route(
             "path": [],
             "distance": None,
             "error": (
-                "No safe evacuation route available"
+                "No safe evacuation "
+                "route available"
             ),
         }
 
 
-if __name__ == "__main__":
+def find_evacuation_route(
+    start: str,
+    destination: Optional[str] = None,
+    mobility: str = "normal",
+    blocked_nodes: Optional[Set[str]] = None,
+):
+    """
+    If destination is supplied:
+        route directly to that destination.
 
-    scenarios = {
-        "normal": set(),
+    If destination is None:
+        automatically select the best
+        available exit.
+    """
 
-        "fire_north": {"N3"},
+    blocked_nodes = (
+        blocked_nodes or set()
+    )
 
-        "blocked_north": {"N3"},
-
-        "flood_south": {"N5"},
-
-        "exit_closed": {"EXIT1"},
-    }
-
-    for scenario, blocked_nodes in scenarios.items():
-
-        print("\n==========================")
-        print(f"Scenario: {scenario}")
-        print("==========================")
-
-        result = find_route(
-            start="N1",
-            destination="EXIT1",
-            mobility="normal",
+    if destination:
+        return find_route(
+            start=start,
+            destination=destination,
+            mobility=mobility,
             blocked_nodes=blocked_nodes,
         )
 
-        if result["success"]:
-            print(
-                "Route:",
-                " -> ".join(result["path"]),
-            )
-            print(
-                "Distance:",
-                result["distance"],
-            )
-        else:
-            print("ERROR:", result["error"])
+    return find_best_exit(
+        start=start,
+        mobility=mobility,
+        blocked_nodes=blocked_nodes,
+    )
+
+
+if __name__ == "__main__":
+
+    print("\nNormal user:")
+    print(
+        find_evacuation_route(
+            start="N1",
+            mobility="normal",
+        )
+    )
+
+    print("\nWheelchair user:")
+    print(
+        find_evacuation_route(
+            start="N1",
+            mobility="wheelchair",
+        )
+    )
+
+    print("\nEXIT1 closed:")
+
+    print(
+        find_evacuation_route(
+            start="N1",
+            mobility="normal",
+            blocked_nodes={
+                "EXIT1"
+            },
+        )
+    )

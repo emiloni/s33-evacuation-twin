@@ -54,5 +54,12 @@
     "weight": 1,
     "type": "corridor",
     "accessible": true
+  },
+  {
+    "from": "N4",
+    "to": "EXIT2",
+    "weight": 4,
+    "type": "corridor",
+    "accessible": true
   }
 ]

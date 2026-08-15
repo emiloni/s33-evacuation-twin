@@ -61,6 +61,35 @@ def fire_scenario() -> List[Dict[str, Any]]:
     ]
 
 
+def closed_exit_scenario() -> List[Dict[str, Any]]:
+    return [
+        create_sensor(
+            "T1",
+            "temperature",
+            "N3",
+            24,
+        ),
+        create_sensor(
+            "S1",
+            "smoke",
+            "N3",
+            5,
+        ),
+        create_sensor(
+            "O1",
+            "occupancy",
+            "N2",
+            15,
+        ),
+        create_sensor(
+            "D1",
+            "door",
+            "EXIT1",
+            "closed",
+        ),
+    ]
+
+
 def sensor_failure_scenario() -> List[Dict[str, Any]]:
     return [
         create_sensor(
