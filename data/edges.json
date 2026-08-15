@@ -1,0 +1,58 @@
+[
+  {
+    "from": "N1",
+    "to": "N2",
+    "weight": 1,
+    "type": "corridor",
+    "accessible": true
+  },
+  {
+    "from": "N2",
+    "to": "N3",
+    "weight": 1,
+    "type": "corridor",
+    "accessible": true
+  },
+  {
+    "from": "N1",
+    "to": "N4",
+    "weight": 2,
+    "type": "corridor",
+    "accessible": true
+  },
+  {
+    "from": "N4",
+    "to": "N5",
+    "weight": 2,
+    "type": "corridor",
+    "accessible": true
+  },
+  {
+    "from": "N5",
+    "to": "N6",
+    "weight": 1,
+    "type": "corridor",
+    "accessible": true
+  },
+  {
+    "from": "N3",
+    "to": "N6",
+    "weight": 2,
+    "type": "corridor",
+    "accessible": true
+  },
+  {
+    "from": "N2",
+    "to": "N5",
+    "weight": 1,
+    "type": "stairs",
+    "accessible": false
+  },
+  {
+    "from": "N6",
+    "to": "EXIT1",
+    "weight": 1,
+    "type": "corridor",
+    "accessible": true
+  }
+]

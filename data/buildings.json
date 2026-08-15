@@ -1,0 +1,12 @@
+[
+  {
+    "id": "B1",
+    "name": "S33 Demo Building",
+    "floors": [
+      {
+        "id": "F1",
+        "name": "Ground Floor"
+      }
+    ]
+  }
+]

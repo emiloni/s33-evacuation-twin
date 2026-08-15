@@ -1,0 +1,47 @@
+[
+  {
+    "id": "normal",
+    "name": "Normal Conditions",
+    "hazards": []
+  },
+  {
+    "id": "fire_north",
+    "name": "Fire in North Corridor",
+    "hazards": [
+      {
+        "type": "fire",
+        "location": "N3"
+      }
+    ]
+  },
+  {
+    "id": "blocked_north",
+    "name": "North Corridor Blocked",
+    "hazards": [
+      {
+        "type": "blocked_corridor",
+        "location": "N3"
+      }
+    ]
+  },
+  {
+    "id": "flood_south",
+    "name": "Flood in South Corridor",
+    "hazards": [
+      {
+        "type": "flood",
+        "location": "N5"
+      }
+    ]
+  },
+  {
+    "id": "exit_closed",
+    "name": "Main Exit Closed",
+    "hazards": [
+      {
+        "type": "closed_exit",
+        "location": "EXIT1"
+      }
+    ]
+  }
+]
