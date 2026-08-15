@@ -1,0 +1,64 @@
+{
+  "building": {
+    "id": "B2",
+    "name": "Test Campus",
+    "floors": 1
+  },
+  "nodes": [
+    {
+      "id": "ROOM_A",
+      "x": 80,
+      "y": 80,
+      "type": "room",
+      "floor": 1,
+      "label": "Computer Lab"
+    },
+    {
+      "id": "CORRIDOR_A",
+      "x": 250,
+      "y": 80,
+      "type": "corridor",
+      "floor": 1,
+      "label": "Main Corridor"
+    },
+    {
+      "id": "CORRIDOR_B",
+      "x": 420,
+      "y": 80,
+      "type": "corridor",
+      "floor": 1,
+      "label": "East Corridor"
+    },
+    {
+      "id": "EXIT_A",
+      "x": 420,
+      "y": 300,
+      "type": "exit",
+      "floor": 1,
+      "label": "Emergency Exit"
+    }
+  ],
+  "edges": [
+    {
+      "from": "ROOM_A",
+      "to": "CORRIDOR_A",
+      "weight": 2,
+      "type": "corridor",
+      "accessible": true
+    },
+    {
+      "from": "CORRIDOR_A",
+      "to": "CORRIDOR_B",
+      "weight": 2,
+      "type": "corridor",
+      "accessible": true
+    },
+    {
+      "from": "CORRIDOR_B",
+      "to": "EXIT_A",
+      "weight": 2,
+      "type": "corridor",
+      "accessible": true
+    }
+  ]
+}

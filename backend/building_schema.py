@@ -1,6 +1,10 @@
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+)
 
 
 class BuildingNode(BaseModel):
@@ -13,23 +17,35 @@ class BuildingNode(BaseModel):
 
 
 class BuildingEdge(BaseModel):
+    model_config = ConfigDict(
+        validate_by_name=True,
+        validate_by_alias=True,
+    )
+
     from_node: str = Field(
         ...,
-        alias="from"
+        alias="from",
     )
+
     to_node: str = Field(
         ...,
-        alias="to"
+        alias="to",
     )
-    weight: float = 1
-    type: str = "corridor"
-    accessible: bool = True
 
-    class Config:
-        allow_population_by_field_name = True
+    weight: float = 1
+
+    type: str = "corridor"
+
+    accessible: bool = True
 
 
 class BuildingDataset(BaseModel):
     building: dict
-    nodes: List[BuildingNode]
-    edges: List[BuildingEdge]
+
+    nodes: List[
+        BuildingNode
+    ]
+
+    edges: List[
+        BuildingEdge
+    ]

@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Set
 
 import networkx as nx
 
@@ -8,13 +8,14 @@ from .constraints import edge_allowed
 
 def get_available_exits(
     graph: nx.Graph,
-    blocked_nodes: set,
+    blocked_nodes: Set[str],
 ) -> List[str]:
 
     exits = []
 
-    for node, data in graph.nodes(data=True):
-
+    for node, data in graph.nodes(
+        data=True
+    ):
         if data.get("type") != "exit":
             continue
 
@@ -29,13 +30,47 @@ def get_available_exits(
 def find_best_exit(
     start: str,
     mobility: str = "normal",
-    blocked_nodes: set = None,
+    blocked_nodes: Optional[Set[str]] = None,
 ) -> Dict[str, Any]:
 
     if blocked_nodes is None:
         blocked_nodes = set()
 
     graph = build_graph()
+
+    # ---------------------------------------------------------
+    # Validate starting node BEFORE removing blocked nodes.
+    # ---------------------------------------------------------
+
+    if start not in graph:
+        return {
+            "success": False,
+            "exit": None,
+            "route": [],
+            "distance": None,
+            "available_exits": [],
+            "error": (
+                f"Starting node '{start}' "
+                "does not exist in the active building."
+            ),
+        }
+
+    if start in blocked_nodes:
+        return {
+            "success": False,
+            "exit": None,
+            "route": [],
+            "distance": None,
+            "available_exits": [],
+            "error": (
+                f"Starting node '{start}' "
+                "is blocked or unsafe."
+            ),
+        }
+
+    # ---------------------------------------------------------
+    # Find available exits.
+    # ---------------------------------------------------------
 
     available_exits = get_available_exits(
         graph,
@@ -49,15 +84,38 @@ def find_best_exit(
             "route": [],
             "distance": None,
             "available_exits": [],
-            "error": "No available evacuation exits",
+            "error": (
+                "No available evacuation exits."
+            ),
         }
 
+    # ---------------------------------------------------------
     # Remove blocked nodes.
+    # ---------------------------------------------------------
+
     graph.remove_nodes_from(
         blocked_nodes
     )
 
+    # The start could theoretically have
+    # been removed above.
+    if start not in graph:
+        return {
+            "success": False,
+            "exit": None,
+            "route": [],
+            "distance": None,
+            "available_exits": available_exits,
+            "error": (
+                f"Starting node '{start}' "
+                "is unavailable."
+            ),
+        }
+
+    # ---------------------------------------------------------
     # Apply mobility constraints.
+    # ---------------------------------------------------------
+
     blocked_edges = []
 
     for u, v, data in graph.edges(
@@ -75,6 +133,11 @@ def find_best_exit(
     graph.remove_edges_from(
         blocked_edges
     )
+
+    # ---------------------------------------------------------
+    # Find shortest safe route to
+    # every available exit.
+    # ---------------------------------------------------------
 
     best_exit = None
     best_route = None
@@ -112,6 +175,13 @@ def find_best_exit(
         except nx.NetworkXNoPath:
             continue
 
+        except nx.NodeNotFound:
+            continue
+
+    # ---------------------------------------------------------
+    # No reachable exit.
+    # ---------------------------------------------------------
+
     if best_exit is None:
 
         return {
@@ -122,7 +192,7 @@ def find_best_exit(
             "available_exits": available_exits,
             "error": (
                 "No safe evacuation route "
-                "to any available exit"
+                "to any available exit."
             ),
         }
 

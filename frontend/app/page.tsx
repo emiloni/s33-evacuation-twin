@@ -70,7 +70,7 @@ const BACKEND_HTTP =
   "http://127.0.0.1:8000";
 
 const BACKEND_WS =
-  "ws://127.0.0.1:8000/ws/evacuation/N1/AUTO";
+  "ws://127.0.0.1:8000/ws/evacuation";
 
 export default function Home() {
   const [building, setBuilding] =
@@ -79,6 +79,8 @@ export default function Home() {
   const [mobility, setMobility] =
     useState<Mobility>("normal");
 
+  const [startNode, setStartNode] =
+    useState("");
   const [scenario, setScenario] =
     useState<Scenario>("normal");
 
@@ -119,40 +121,95 @@ export default function Home() {
    */
 
   async function loadBuilding() {
-    try {
-      setBuildingLoading(true);
-      setBuildingError("");
+  try {
+    setBuildingLoading(true);
+    setBuildingError("");
 
-      const response = await fetch(
-        `${BACKEND_HTTP}/api/v1/building`,
-        {
-          cache: "no-store",
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          "Failed to load building."
-        );
+    const response = await fetch(
+      `${BACKEND_HTTP}/api/v1/building`,
+      {
+        cache: "no-store",
       }
+    );
 
-      const data = await response.json();
-
-      setBuilding(data);
-    } catch (error) {
-      console.error(error);
-
-      setBuildingError(
-        "Unable to load building from backend."
+    if (!response.ok) {
+      throw new Error(
+        "Failed to load building."
       );
-    } finally {
-      setBuildingLoading(false);
     }
+
+    const data: BuildingData =
+      await response.json();
+
+    setBuilding(data);
+
+    // Select a valid starting node
+    // from the newly loaded building.
+    const firstNonExit =
+      data.nodes.find(
+        (node) =>
+          node.type !== "exit"
+      );
+
+    if (firstNonExit) {
+      setStartNode(
+        firstNonExit.id
+      );
+    } else if (
+      data.nodes.length > 0
+    ) {
+      setStartNode(
+        data.nodes[0].id
+      );
+    } else {
+      setStartNode("");
+    }
+
+    // Clear old route because the
+    // building has changed.
+    setRoute([]);
+    setHazards([]);
+    setConfidence("unknown");
+    setMode("unknown");
+    setMessage("");
+
+  } catch (error) {
+    console.error(error);
+
+    setBuildingError(
+      "Unable to load building from backend."
+    );
+  } finally {
+    setBuildingLoading(false);
   }
+}
 
   useEffect(() => {
     loadBuilding();
   }, []);
+
+useEffect(() => {
+  if (
+    building &&
+    building.nodes.length > 0 &&
+    !startNode
+  ) {
+    const firstNonExit =
+      building.nodes.find(
+        (node) =>
+          node.type !== "exit"
+      );
+
+    setStartNode(
+      firstNonExit?.id ||
+        building.nodes[0].id
+    );
+  }
+}, [
+  building,
+  startNode,
+]);
+
 
   /*
    * ----------------------------------------------------------
@@ -229,14 +286,14 @@ export default function Home() {
    */
 
   useEffect(() => {
-    if (!building) {
-      return;
-    }
+  if (!building || !startNode) {
+    return;
+  }
 
     const socket =
-      new WebSocket(
-        `${BACKEND_WS}/${mobility}`
-      );
+  new WebSocket(
+    `${BACKEND_WS}/${startNode}/AUTO/${mobility}`
+  );
 
     socket.onopen = () => {
       setConnected(true);
@@ -245,7 +302,7 @@ export default function Home() {
         socket,
         scenario
       );
-    };
+    }; 
 
     socket.onmessage = (
       event
@@ -297,6 +354,7 @@ export default function Home() {
     };
   }, [
     building,
+    startNode,
     mobility,
     scenario,
   ]);
@@ -662,7 +720,35 @@ export default function Home() {
               <h2 className="text-xl font-semibold mb-6">
                 Evacuation Control
               </h2>
+<label className="block text-sm text-slate-400 mb-2">
+  Start Location
+</label>
 
+<select
+  value={startNode}
+  onChange={(event) =>
+    setStartNode(event.target.value)
+  }
+  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 mb-6"
+>
+  {building.nodes
+    .filter(
+      (node) =>
+        node.type !== "exit"
+    )
+    .map((node) => (
+      <option
+        key={node.id}
+        value={node.id}
+      >
+        {node.id}
+        {node.label &&
+        node.label !== node.id
+          ? ` — ${node.label}`
+          : ""}
+      </option>
+    ))}
+</select>
               <label className="block text-sm text-slate-400 mb-2">
                 Mobility
               </label>
