@@ -27,7 +27,9 @@ from .building_schema import (
 from .building_service import (
     activate_building,
 )
-
+from routing.occupancy import (
+    build_occupancy_map,
+)
 
 app = FastAPI(
     title="S33 Evacuation Digital Twin API",
@@ -237,9 +239,17 @@ def calculate_evacuation(
     sensors: List[dict],
 ):
 
+    # ---------------------------------------------------------
+    # Sensor safety state
+    # ---------------------------------------------------------
+
     safety = evaluate_sensor_state(
         sensors
     )
+
+    # ---------------------------------------------------------
+    # Detect hazards
+    # ---------------------------------------------------------
 
     hazard_result = detect_hazards(
         sensors
@@ -253,11 +263,24 @@ def calculate_evacuation(
         "hazards"
     ]
 
+    # ---------------------------------------------------------
+    # Build occupancy map
+    # ---------------------------------------------------------
+
+    occupancy = build_occupancy_map(
+        sensors
+    )
+
+    # ---------------------------------------------------------
+    # Calculate evacuation route
+    # ---------------------------------------------------------
+
     route = find_evacuation_route(
         start=start,
         destination=destination,
         mobility=mobility,
         blocked_nodes=blocked_nodes,
+        occupancy=occupancy,
     )
 
     selected_exit = route.get(
@@ -267,35 +290,49 @@ def calculate_evacuation(
 
     route_path = route.get(
         "route",
-        route.get("path", []),
+        route.get(
+            "path",
+            [],
+        ),
     )
 
     return {
         "success": route["success"],
+
         "route": route_path,
+
         "distance": route["distance"],
+
         "start": start,
+
         "destination": selected_exit,
+
         "mobility": mobility,
+
         "hazards": hazards,
+
         "blocked_nodes": list(
             blocked_nodes
         ),
+
+        "occupancy": occupancy,
+
         "mode": safety["mode"],
+
         "confidence": safety[
             "confidence"
         ],
+
         "advisory": safety[
             "advisory"
         ],
+
         "message": (
             safety["message"]
             if route["success"]
             else route["error"]
         ),
     }
-
-
 @app.post(
     "/api/v1/evacuation/route"
 )
@@ -360,8 +397,7 @@ async def evacuation_websocket(
 
             result = calculate_evacuation(
                 start=start,
-                destination=(
-                    actual_destination
+                destination=(actual_destination
                 ),
                 mobility=mobility,
                 sensors=sensors,

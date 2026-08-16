@@ -87,19 +87,12 @@ def build_graph() -> nx.Graph:
             active
         )
 
-    nodes = load_json(
-        "nodes.json"
+    # Default to the multi-floor
+    # demonstration building.
+    demo_building = load_json(
+        "demo_building.json"
     )
-
-    edges = load_json(
-        "edges.json"
-    )
-
-    building = {
-        "nodes": nodes,
-        "edges": edges,
-    }
 
     return build_graph_from_data(
-        building
+        demo_building
     )

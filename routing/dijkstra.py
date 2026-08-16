@@ -103,10 +103,11 @@ def find_route(
 
 
 def find_evacuation_route(
-    start: str,
-    destination: Optional[str] = None,
-    mobility: str = "normal",
-    blocked_nodes: Optional[Set[str]] = None,
+    start,
+    destination=None,
+    mobility="normal",
+    blocked_nodes=None,
+    occupancy=None,
 ):
     """
     If destination is supplied:
@@ -133,35 +134,26 @@ def find_evacuation_route(
         start=start,
         mobility=mobility,
         blocked_nodes=blocked_nodes,
+        occupancy=occupancy,
     )
 
 
 if __name__ == "__main__":
 
-    print("\nNormal user:")
+    print("\n3-Floor Normal User:")
+
     print(
         find_evacuation_route(
-            start="N1",
+            start="F3_N1",
             mobility="normal",
         )
     )
 
-    print("\nWheelchair user:")
+    print("\n3-Floor Wheelchair User:")
+
     print(
         find_evacuation_route(
-            start="N1",
+            start="F3_N1",
             mobility="wheelchair",
-        )
-    )
-
-    print("\nEXIT1 closed:")
-
-    print(
-        find_evacuation_route(
-            start="N1",
-            mobility="normal",
-            blocked_nodes={
-                "EXIT1"
-            },
         )
     )

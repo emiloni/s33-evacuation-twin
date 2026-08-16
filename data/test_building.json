@@ -1,63 +1,88 @@
 {
   "building": {
-    "id": "B2",
-    "name": "Test Campus",
-    "floors": 1
+    "id": "CAMPUS_01",
+    "name": "Engineering Block",
+    "floors": 3
   },
+
   "nodes": [
     {
-      "id": "ROOM_A",
-      "x": 80,
-      "y": 80,
+      "id": "F1_N1",
+      "x": 100,
+      "y": 100,
+      "floor": 1,
       "type": "room",
-      "floor": 1,
-      "label": "Computer Lab"
+      "label": "Room 101"
     },
+
     {
-      "id": "CORRIDOR_A",
-      "x": 250,
-      "y": 80,
-      "type": "corridor",
-      "floor": 1,
-      "label": "Main Corridor"
+      "id": "F2_N1",
+      "x": 100,
+      "y": 100,
+      "floor": 2,
+      "type": "room",
+      "label": "Room 201"
     },
+
     {
-      "id": "CORRIDOR_B",
-      "x": 420,
-      "y": 80,
-      "type": "corridor",
-      "floor": 1,
-      "label": "East Corridor"
+      "id": "F3_N1",
+      "x": 100,
+      "y": 100,
+      "floor": 3,
+      "type": "room",
+      "label": "Room 301"
     },
+
     {
-      "id": "EXIT_A",
-      "x": 420,
+      "id": "F1_ELEVATOR",
+      "x": 300,
       "y": 300,
-      "type": "exit",
       "floor": 1,
-      "label": "Emergency Exit"
+      "type": "elevator",
+      "label": "Elevator"
+    },
+
+    {
+      "id": "F2_ELEVATOR",
+      "x": 300,
+      "y": 300,
+      "floor": 2,
+      "type": "elevator",
+      "label": "Elevator"
+    },
+
+    {
+      "id": "F3_ELEVATOR",
+      "x": 300,
+      "y": 300,
+      "floor": 3,
+      "type": "elevator",
+      "label": "Elevator"
     }
   ],
+
   "edges": [
     {
-      "from": "ROOM_A",
-      "to": "CORRIDOR_A",
+      "from": "F1_N1",
+      "to": "F1_ELEVATOR",
       "weight": 2,
       "type": "corridor",
       "accessible": true
     },
+
     {
-      "from": "CORRIDOR_A",
-      "to": "CORRIDOR_B",
-      "weight": 2,
-      "type": "corridor",
+      "from": "F1_ELEVATOR",
+      "to": "F2_ELEVATOR",
+      "weight": 8,
+      "type": "elevator",
       "accessible": true
     },
+
     {
-      "from": "CORRIDOR_B",
-      "to": "EXIT_A",
-      "weight": 2,
-      "type": "corridor",
+      "from": "F2_ELEVATOR",
+      "to": "F3_ELEVATOR",
+      "weight": 8,
+      "type": "elevator",
       "accessible": true
     }
   ]

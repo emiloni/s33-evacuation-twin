@@ -1,9 +1,16 @@
-from typing import List, Dict, Any, Optional, Set
+from typing import (
+    List,
+    Dict,
+    Any,
+    Optional,
+    Set,
+)
 
 import networkx as nx
 
 from .graph import build_graph
 from .constraints import edge_allowed
+from .occupancy import occupancy_penalty
 
 
 def get_available_exits(
@@ -16,6 +23,7 @@ def get_available_exits(
     for node, data in graph.nodes(
         data=True
     ):
+
         if data.get("type") != "exit":
             continue
 
@@ -31,18 +39,33 @@ def find_best_exit(
     start: str,
     mobility: str = "normal",
     blocked_nodes: Optional[Set[str]] = None,
+    occupancy: Optional[
+        Dict[str, float]
+    ] = None,
 ) -> Dict[str, Any]:
+
+    # ---------------------------------------------------------
+    # Defaults
+    # ---------------------------------------------------------
 
     if blocked_nodes is None:
         blocked_nodes = set()
 
+    if occupancy is None:
+        occupancy = {}
+
+    # ---------------------------------------------------------
+    # Build graph
+    # ---------------------------------------------------------
+
     graph = build_graph()
 
     # ---------------------------------------------------------
-    # Validate starting node BEFORE removing blocked nodes.
+    # Validate starting node
     # ---------------------------------------------------------
 
     if start not in graph:
+
         return {
             "success": False,
             "exit": None,
@@ -56,6 +79,7 @@ def find_best_exit(
         }
 
     if start in blocked_nodes:
+
         return {
             "success": False,
             "exit": None,
@@ -69,7 +93,7 @@ def find_best_exit(
         }
 
     # ---------------------------------------------------------
-    # Find available exits.
+    # Find available exits
     # ---------------------------------------------------------
 
     available_exits = get_available_exits(
@@ -78,6 +102,7 @@ def find_best_exit(
     )
 
     if not available_exits:
+
         return {
             "success": False,
             "exit": None,
@@ -90,22 +115,23 @@ def find_best_exit(
         }
 
     # ---------------------------------------------------------
-    # Remove blocked nodes.
+    # Remove blocked nodes
     # ---------------------------------------------------------
 
     graph.remove_nodes_from(
         blocked_nodes
     )
 
-    # The start could theoretically have
-    # been removed above.
     if start not in graph:
+
         return {
             "success": False,
             "exit": None,
             "route": [],
             "distance": None,
-            "available_exits": available_exits,
+            "available_exits": (
+                available_exits
+            ),
             "error": (
                 f"Starting node '{start}' "
                 "is unavailable."
@@ -113,7 +139,7 @@ def find_best_exit(
         }
 
     # ---------------------------------------------------------
-    # Apply mobility constraints.
+    # Apply mobility constraints
     # ---------------------------------------------------------
 
     blocked_edges = []
@@ -121,11 +147,13 @@ def find_best_exit(
     for u, v, data in graph.edges(
         data=True
     ):
+
         if not edge_allowed(
             data,
             mobility,
             blocked_nodes,
         ):
+
             blocked_edges.append(
                 (u, v)
             )
@@ -135,8 +163,48 @@ def find_best_exit(
     )
 
     # ---------------------------------------------------------
-    # Find shortest safe route to
-    # every available exit.
+    # Apply occupancy-aware routing cost
+    # ---------------------------------------------------------
+
+    for u, v, data in graph.edges(
+        data=True
+    ):
+
+        base_weight = float(
+            data.get(
+                "weight",
+                1,
+            )
+        )
+
+        from_occupancy = occupancy.get(
+            u,
+            0.0,
+        )
+
+        to_occupancy = occupancy.get(
+            v,
+            0.0,
+        )
+
+        average_occupancy = (
+            from_occupancy
+            + to_occupancy
+        ) / 2
+
+        congestion_cost = (
+            occupancy_penalty(
+                average_occupancy
+            )
+        )
+
+        data["routing_weight"] = (
+            base_weight
+            + congestion_cost
+        )
+
+    # ---------------------------------------------------------
+    # Find best safe route
     # ---------------------------------------------------------
 
     best_exit = None
@@ -154,32 +222,37 @@ def find_best_exit(
                 graph,
                 start,
                 exit_node,
-                weight="weight",
+                weight="routing_weight",
             )
 
-            distance = nx.dijkstra_path_length(
-                graph,
-                start,
-                exit_node,
-                weight="weight",
+            distance = (
+                nx.dijkstra_path_length(
+                    graph,
+                    start,
+                    exit_node,
+                    weight="routing_weight",
+                )
             )
 
             if (
                 best_distance is None
                 or distance < best_distance
             ):
+
                 best_exit = exit_node
                 best_route = route
                 best_distance = distance
 
         except nx.NetworkXNoPath:
+
             continue
 
         except nx.NodeNotFound:
+
             continue
 
     # ---------------------------------------------------------
-    # No reachable exit.
+    # No reachable exit
     # ---------------------------------------------------------
 
     if best_exit is None:
@@ -189,17 +262,25 @@ def find_best_exit(
             "exit": None,
             "route": [],
             "distance": None,
-            "available_exits": available_exits,
+            "available_exits": (
+                available_exits
+            ),
             "error": (
                 "No safe evacuation route "
                 "to any available exit."
             ),
         }
 
+    # ---------------------------------------------------------
+    # Success
+    # ---------------------------------------------------------
+
     return {
         "success": True,
         "exit": best_exit,
         "route": best_route,
         "distance": best_distance,
-        "available_exits": available_exits,
+        "available_exits": (
+            available_exits
+        ),
     }

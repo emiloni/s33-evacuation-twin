@@ -1,10 +1,6 @@
 from typing import List, Optional
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-)
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BuildingNode(BaseModel):
@@ -42,10 +38,6 @@ class BuildingEdge(BaseModel):
 class BuildingDataset(BaseModel):
     building: dict
 
-    nodes: List[
-        BuildingNode
-    ]
+    nodes: List[BuildingNode]
 
-    edges: List[
-        BuildingEdge
-    ]
+    edges: List[BuildingEdge]

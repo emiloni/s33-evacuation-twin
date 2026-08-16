@@ -1,12 +1,13 @@
 {
   "building": {
     "id": "B1",
-    "name": "S33 Demo Building",
-    "floors": 1
+    "name": "S33 Multi-Floor Demo Building",
+    "floors": 3
   },
+
   "nodes": [
     {
-      "id": "N1",
+      "id": "F1_N1",
       "x": 100,
       "y": 100,
       "type": "room",
@@ -14,124 +15,339 @@
       "label": "Room 101"
     },
     {
-      "id": "N2",
+      "id": "F1_N2",
       "x": 250,
       "y": 100,
       "type": "corridor",
       "floor": 1,
-      "label": "North Corridor"
+      "label": "Corridor 1"
     },
     {
-      "id": "N3",
+      "id": "F1_N3",
       "x": 400,
       "y": 100,
       "type": "corridor",
       "floor": 1,
-      "label": "North Corridor 2"
+      "label": "Corridor 2"
     },
     {
-      "id": "N4",
-      "x": 100,
-      "y": 250,
-      "type": "corridor",
-      "floor": 1,
-      "label": "South Corridor"
-    },
-    {
-      "id": "N5",
-      "x": 250,
-      "y": 250,
-      "type": "corridor",
-      "floor": 1,
-      "label": "South Corridor 2"
-    },
-    {
-      "id": "N6",
+      "id": "F1_EXIT1",
       "x": 400,
-      "y": 250,
-      "type": "corridor",
-      "floor": 1,
-      "label": "East Corridor"
-    },
-    {
-      "id": "EXIT1",
-      "x": 400,
-      "y": 400,
+      "y": 300,
       "type": "exit",
       "floor": 1,
       "label": "Main Exit"
     },
+
     {
-      "id": "EXIT2",
+      "id": "F2_N1",
       "x": 100,
-      "y": 400,
-      "type": "exit",
+      "y": 100,
+      "type": "room",
+      "floor": 2,
+      "label": "Room 201"
+    },
+    {
+      "id": "F2_N2",
+      "x": 250,
+      "y": 100,
+      "type": "corridor",
+      "floor": 2,
+      "label": "Corridor 1"
+    },
+    {
+      "id": "F2_N3",
+      "x": 400,
+      "y": 100,
+      "type": "corridor",
+      "floor": 2,
+      "label": "Corridor 2"
+    },
+
+    {
+      "id": "F3_N1",
+      "x": 100,
+      "y": 100,
+      "type": "room",
+      "floor": 3,
+      "label": "Room 301"
+    },
+    {
+      "id": "F3_N2",
+      "x": 250,
+      "y": 100,
+      "type": "corridor",
+      "floor": 3,
+      "label": "Corridor 1"
+    },
+    {
+      "id": "F3_N3",
+      "x": 400,
+      "y": 100,
+      "type": "corridor",
+      "floor": 3,
+      "label": "Corridor 2"
+    },
+
+    {
+      "id": "F1_STAIR_A",
+      "x": 250,
+      "y": 250,
+      "type": "stairs",
       "floor": 1,
-      "label": "South Exit"
+      "label": "Stairwell A"
+    },
+    {
+      "id": "F2_STAIR_A",
+      "x": 250,
+      "y": 250,
+      "type": "stairs",
+      "floor": 2,
+      "label": "Stairwell A"
+    },
+    {
+      "id": "F3_STAIR_A",
+      "x": 250,
+      "y": 250,
+      "type": "stairs",
+      "floor": 3,
+      "label": "Stairwell A"
+    },
+
+    {
+      "id": "F1_STAIR_B",
+      "x": 100,
+      "y": 300,
+      "type": "stairs",
+      "floor": 1,
+      "label": "Stairwell B"
+    },
+    {
+      "id": "F2_STAIR_B",
+      "x": 100,
+      "y": 300,
+      "type": "stairs",
+      "floor": 2,
+      "label": "Stairwell B"
+    },
+    {
+      "id": "F3_STAIR_B",
+      "x": 100,
+      "y": 300,
+      "type": "stairs",
+      "floor": 3,
+      "label": "Stairwell B"
+    },
+
+    {
+      "id": "F1_ELEVATOR",
+      "x": 350,
+      "y": 250,
+      "type": "elevator",
+      "floor": 1,
+      "label": "Elevator"
+    },
+    {
+      "id": "F2_ELEVATOR",
+      "x": 350,
+      "y": 250,
+      "type": "elevator",
+      "floor": 2,
+      "label": "Elevator"
+    },
+    {
+      "id": "F3_ELEVATOR",
+      "x": 350,
+      "y": 250,
+      "type": "elevator",
+      "floor": 3,
+      "label": "Elevator"
     }
   ],
+
   "edges": [
     {
-      "from": "N1",
-      "to": "N2",
+      "from": "F1_N1",
+      "to": "F1_N2",
       "weight": 1,
       "type": "corridor",
       "accessible": true
     },
     {
-      "from": "N2",
-      "to": "N3",
+      "from": "F1_N2",
+      "to": "F1_N3",
       "weight": 1,
       "type": "corridor",
       "accessible": true
     },
     {
-      "from": "N1",
-      "to": "N4",
+      "from": "F1_N3",
+      "to": "F1_EXIT1",
       "weight": 2,
       "type": "corridor",
       "accessible": true
     },
+
     {
-      "from": "N4",
-      "to": "N5",
-      "weight": 2,
-      "type": "corridor",
-      "accessible": true
-    },
-    {
-      "from": "N5",
-      "to": "N6",
+      "from": "F2_N1",
+      "to": "F2_N2",
       "weight": 1,
       "type": "corridor",
       "accessible": true
     },
     {
-      "from": "N3",
-      "to": "N6",
-      "weight": 2,
+      "from": "F2_N2",
+      "to": "F2_N3",
+      "weight": 1,
+      "type": "corridor",
+      "accessible": true
+    },
+
+    {
+      "from": "F3_N1",
+      "to": "F3_N2",
+      "weight": 1,
       "type": "corridor",
       "accessible": true
     },
     {
-      "from": "N2",
-      "to": "N5",
+      "from": "F3_N2",
+      "to": "F3_N3",
+      "weight": 1,
+      "type": "corridor",
+      "accessible": true
+    },
+
+    {
+      "from": "F1_N2",
+      "to": "F1_STAIR_A",
       "weight": 1,
       "type": "stairs",
       "accessible": false
     },
     {
-      "from": "N6",
-      "to": "EXIT1",
+      "from": "F2_N2",
+      "to": "F2_STAIR_A",
+      "weight": 1,
+      "type": "stairs",
+      "accessible": false
+    },
+    {
+      "from": "F3_N2",
+      "to": "F3_STAIR_A",
+      "weight": 1,
+      "type": "stairs",
+      "accessible": false
+    },
+
+    {
+      "from": "F1_STAIR_A",
+      "to": "F2_STAIR_A",
+      "weight": 5,
+      "type": "stairs",
+      "accessible": false
+    },
+    {
+      "from": "F2_STAIR_A",
+      "to": "F3_STAIR_A",
+      "weight": 5,
+      "type": "stairs",
+      "accessible": false
+    },
+
+    {
+      "from": "F3_N1",
+      "to": "F3_STAIR_B",
+      "weight": 3,
+      "type": "stairs",
+      "accessible": false
+    },
+    {
+      "from": "F2_N1",
+      "to": "F2_STAIR_B",
+      "weight": 3,
+      "type": "stairs",
+      "accessible": false
+    },
+    {
+      "from": "F1_N1",
+      "to": "F1_STAIR_B",
+      "weight": 3,
+      "type": "stairs",
+      "accessible": false
+    },
+
+    {
+      "from": "F1_STAIR_B",
+      "to": "F2_STAIR_B",
+      "weight": 6,
+      "type": "stairs",
+      "accessible": false
+    },
+    {
+      "from": "F2_STAIR_B",
+      "to": "F3_STAIR_B",
+      "weight": 6,
+      "type": "stairs",
+      "accessible": false
+    },
+
+    {
+      "from": "F1_STAIR_B",
+      "to": "F1_N3",
+      "weight": 2,
+      "type": "corridor",
+      "accessible": true
+    },
+    {
+      "from": "F2_STAIR_B",
+      "to": "F2_N3",
+      "weight": 2,
+      "type": "corridor",
+      "accessible": true
+    },
+    {
+      "from": "F3_STAIR_B",
+      "to": "F3_N3",
+      "weight": 2,
+      "type": "corridor",
+      "accessible": true
+    },
+
+    {
+      "from": "F1_N3",
+      "to": "F1_ELEVATOR",
       "weight": 1,
       "type": "corridor",
       "accessible": true
     },
     {
-      "from": "N4",
-      "to": "EXIT2",
-      "weight": 4,
+      "from": "F2_N3",
+      "to": "F2_ELEVATOR",
+      "weight": 1,
       "type": "corridor",
+      "accessible": true
+    },
+    {
+      "from": "F3_N3",
+      "to": "F3_ELEVATOR",
+      "weight": 1,
+      "type": "corridor",
+      "accessible": true
+    },
+
+    {
+      "from": "F1_ELEVATOR",
+      "to": "F2_ELEVATOR",
+      "weight": 6,
+      "type": "elevator",
+      "accessible": true
+    },
+    {
+      "from": "F2_ELEVATOR",
+      "to": "F3_ELEVATOR",
+      "weight": 6,
+      "type": "elevator",
       "accessible": true
     }
   ]
