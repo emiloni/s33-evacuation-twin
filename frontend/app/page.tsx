@@ -338,6 +338,44 @@ export default function Home() {
 
   /*
    * ----------------------------------------------------------
+   * ARCHITECTURAL FLOOR LAYOUT
+   * ----------------------------------------------------------
+   * Keep the real dataset coordinates, but normalize them into
+   * the SVG map area. This makes the displayed route follow the
+   * actual building topology instead of using index-based
+   * positions.
+   */
+
+  const floorLayout = useMemo(() => {
+    if (currentFloorNodes.length === 0) {
+      return {};
+    }
+
+    const xs = currentFloorNodes.map((node) => node.x);
+    const ys = currentFloorNodes.map((node) => node.y);
+
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    const rangeX = Math.max(maxX - minX, 1);
+    const rangeY = Math.max(maxY - minY, 1);
+
+    const layout: Record<string, { x: number; y: number }> = {};
+
+    for (const node of currentFloorNodes) {
+      layout[node.id] = {
+        x: 95 + ((node.x - minX) / rangeX) * 680,
+        y: 85 + ((node.y - minY) / rangeY) * 320,
+      };
+    }
+
+    return layout;
+  }, [currentFloorNodes]);
+
+  /*
+   * ----------------------------------------------------------
    * CURRENT FLOOR EDGES
    * ----------------------------------------------------------
    */
@@ -689,15 +727,12 @@ function isNodeBlocked(
     socket: WebSocket,
     selectedScenario: Scenario
   ) {
-    if (socket.readyState !== WebSocket.OPEN) {
-      return;
-    }
-
     socket.send(
       JSON.stringify({
-        sensors: buildScenarioSensors(
-          selectedScenario
-        ),
+        sensors:
+          buildScenarioSensors(
+            selectedScenario
+          ),
       })
     );
   }
@@ -784,12 +819,7 @@ function isNodeBlocked(
     };
 
     return () => {
-      if (
-        socket.readyState === WebSocket.OPEN ||
-        socket.readyState === WebSocket.CONNECTING
-      ) {
-        socket.close();
-      }
+      socket.close();
     };
 
   }, [
@@ -1192,356 +1222,417 @@ function isNodeBlocked(
 
               </div>
 
-              {/* SVG */}
+              {/* ARCHITECTURAL FLOOR MAP */}
+              <div className="mt-6">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900">
+                        Building Floor Map
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        Floor {selectedFloor} • Live digital twin
+                      </p>
+                    </div>
 
-              <svg
-                viewBox="0 0 500 400"
-                className="w-full bg-white rounded-lg"
-              >
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full bg-green-50 px-3 py-1 font-semibold text-green-700">● Recommended route</span>
+                      <span className="rounded-full bg-blue-50 px-3 py-1 font-semibold text-blue-700">● Exit</span>
+                      <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700">● Stairs</span>
+                      <span className="rounded-full bg-violet-50 px-3 py-1 font-semibold text-violet-700">● Elevator</span>
+                      <span className="rounded-full bg-red-50 px-3 py-1 font-semibold text-red-700">● Hazard</span>
+                    </div>
+                  </div>
 
-                {/* NORMAL EDGES */}
-
-                {currentFloorEdges.map(
-                  (
-                    edge,
-                    index
-                  ) => {
-
-                    const from =
-                      nodeMap[
-                        edge.from
-                      ];
-
-                    const to =
-                      nodeMap[
-                        edge.to
-                      ];
-
-                    if (
-                      !from ||
-                      !to
-                    ) {
-                      return null;
-                    }
-
-                    const isStair =
-                      edge.type ===
-                      "stairs";
-
-                    const isElevator =
-                      edge.type ===
-                      "elevator";
-
-                    return (
-                      <line
-                        key={`${edge.from}-${edge.to}-${index}`}
-                        x1={from.x}
-                        y1={from.y}
-                        x2={to.x}
-                        y2={to.y}
-                        stroke={
-                          isStair
-                            ? "#f59e0b"
-                            : isElevator
-                            ? "#8b5cf6"
-                            : "#94a3b8"
-                        }
-                        strokeWidth={
-                          isStair ||
-                          isElevator
-                            ? 7
-                            : 8
-                        }
-                        strokeLinecap="round"
-                        strokeDasharray={
-                          isStair ||
-                          isElevator
-                            ? "10 6"
-                            : undefined
-                        }
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <svg
+                      viewBox="0 0 900 560"
+                      className="mx-auto h-auto min-w-[760px] w-full"
+                      role="img"
+                      aria-label={`Architectural floor map for Floor ${selectedFloor}`}
+                    >
+                      {/* Building shell */}
+                      <rect
+                        x="25"
+                        y="25"
+                        width="850"
+                        height="510"
+                        rx="16"
+                        fill="#f8fafc"
+                        stroke="#94a3b8"
+                        strokeWidth="4"
                       />
-                    );
-                  }
-                )}
 
-                {/* ROUTE */}
+                      {/* Real building edges. These are rendered behind the rooms,
+                          using the normalized positions from the uploaded dataset. */}
+                      {currentFloorEdges.map((edge) => {
+                        const from = floorLayout[edge.from];
+                        const to = floorLayout[edge.to];
 
-                {currentFloorRouteEdges.map(
-                  (
-                    edge,
-                    index
-                  ) => (
-                    <line
-                      key={`route-${index}`}
-                      x1={
-                        edge.from.x
-                      }
-                      y1={
-                        edge.from.y
-                      }
-                      x2={
-                        edge.to.x
-                      }
-                      y2={
-                        edge.to.y
-                      }
-                      stroke="#16a34a"
-                      strokeWidth="12"
-                      strokeLinecap="round"
-                    />
-                  )
-                )}
+                        if (!from || !to) {
+                          return null;
+                        }
 
-                {/* NODES */}
+                        const blocked =
+                          isHazard(edge.from) ||
+                          isHazard(edge.to);
 
-                {currentFloorNodes.map(
-                  (node) => {
+                        const onRoute =
+                          currentFloorRouteEdges.some(
+                            (routeEdge) =>
+                              routeEdge.from.id === edge.from &&
+                              routeEdge.to.id === edge.to
+                          );
 
-                    const hazard =
-                      isHazard(
-                        node.id
-                      );
-
-                    const routeNode =
-                      isOnRoute(
-                        node.id
-                      );
-
-                    const nodeHazards =
-                      getNodeHazards(node.id);
-
-                    const nodeBlocked =
-                      nodeHazards.length > 0;
-
-                    const nodeOccupancy =
-                      getOccupancy(
-                        node.id
-                      );
-
-                    const occupancyColor =
-                      getOccupancyColor(
-                        nodeOccupancy
-                      );
-
-                    let fill =
-                      "#64748b";
-
-                    if (
-                      node.type ===
-                      "exit"
-                    ) {
-                      fill =
-                        "#2563eb";
-                    }
-
-                    if (
-                      node.type ===
-                      "stairs"
-                    ) {
-                      fill =
-                        "#f59e0b";
-                    }
-
-                    if (
-                      node.type ===
-                      "elevator"
-                    ) {
-                      fill =
-                        "#8b5cf6";
-                    }
-
-                    if (
-                      routeNode
-                    ) {
-                      fill =
-                        "#16a34a";
-                    }
-
-                    if (
-                      hazard
-                    ) {
-                      fill =
-                        "#dc2626";
-                    }
-
-                    return (
-                      <g
-                        key={node.id}
-                      >
-
-                        <circle
-                          cx={node.x}
-                          cy={node.y}
-                          r={nodeBlocked ? 15 : 12}
-                          fill={
-                            nodeBlocked
-                              ? "#dc2626"
-                              : routeNode
-                                ? "#22c55e"
-                                : node.type === "exit"
-                                  ? "#2563eb"
-                                  : node.type === "stairs"
+                        return (
+                          <line
+                            key={`edge-${edge.from}-${edge.to}`}
+                            x1={from.x}
+                            y1={from.y}
+                            x2={to.x}
+                            y2={to.y}
+                            stroke={
+                              blocked
+                                ? "#ef4444"
+                                : onRoute
+                                  ? "#16a34a"
+                                  : edge.type === "stairs"
                                     ? "#f59e0b"
-                                    : node.type === "elevator"
+                                    : edge.type === "elevator"
                                       ? "#8b5cf6"
-                                      : "#334155"
+                                      : "#94a3b8"
+                            }
+                            strokeWidth={onRoute ? 10 : 8}
+                            strokeLinecap="round"
+                            strokeDasharray={
+                              blocked ? "10 7" : undefined
+                            }
+                            opacity={blocked ? 0.9 : 0.75}
+                          />
+                        );
+                      })}
+
+                      {/* Rooms and corridors */}
+                      {currentFloorNodes
+                        .filter(
+                          (node) =>
+                            node.type === "room" ||
+                            node.type === "corridor"
+                        )
+                        .map((node) => {
+                          const point = floorLayout[node.id];
+
+                          if (!point) {
+                            return null;
                           }
-                          stroke={
-                            nodeBlocked
-                              ? "#fecaca"
-                              : routeNode
-                                ? "#bbf7d0"
-                                : "#94a3b8"
-                          }
-                          strokeWidth={nodeBlocked ? 3 : 1}
-                        />
 
-                        <text
-                          x={node.x}
-                          y={
-                            node.y + 5
-                          }
-                          textAnchor="middle"
-                          fontSize="10"
-                          fill="white"
-                          fontWeight="bold"
-                        >
-                          {node.type ===
-                          "elevator"
-                            ? "E"
-                            : node.type ===
-                              "stairs"
-                            ? "S"
-                            : node.type ===
-                              "exit"
-                            ? "EXIT"
-                            : node.id}
-                        </text>
+                          const hazard = isHazard(node.id);
+                          const routeNode = isOnRoute(node.id);
+                          const value = getOccupancy(node.id);
+                          const isCorridor = node.type === "corridor";
+                          const width = isCorridor ? 150 : 180;
+                          const height = isCorridor ? 52 : 92;
+                          const x = point.x - width / 2;
+                          const y = point.y - height / 2;
 
-                        <text
-                          x={node.x}
-                          y={
-                            node.y + 40
-                          }
-                          textAnchor="middle"
-                          fontSize="11"
-                          fill="#111827"
-                        >
-                          {node.label}
-                        </text>
-
-                        {nodeBlocked && (
-                          <>
-                            <text
-                              x={node.x}
-                              y={node.y - 24}
-                              textAnchor="middle"
-                              fontSize="10"
-                              fill="#dc2626"
-                              fontWeight="bold"
-                            >
-                              HAZARD
-                            </text>
-
-                            <text
-                              x={node.x}
-                              y={node.y + 56}
-                              textAnchor="middle"
-                              fontSize="9"
-                              fill="#dc2626"
-                              fontWeight="bold"
-                            >
-                              BLOCKED
-                            </text>
-                          </>
-                        )}
-
-                        {nodeOccupancy > 0 &&
-                          node.type !== "exit" && (
-                            <>
-                              <circle
-                                cx={node.x + 24}
-                                cy={node.y - 24}
-                                r="11"
+                          return (
+                            <g key={`space-${node.id}`}>
+                              <rect
+                                x={x}
+                                y={y}
+                                width={width}
+                                height={height}
+                                rx={isCorridor ? 10 : 12}
                                 fill={
-                                  occupancyColor
+                                  hazard
+                                    ? "#fee2e2"
+                                    : routeNode
+                                      ? "#dcfce7"
+                                      : isCorridor
+                                        ? "#e2e8f0"
+                                        : "#ffffff"
                                 }
-                                stroke="white"
-                                strokeWidth="2"
+                                stroke={
+                                  hazard
+                                    ? "#dc2626"
+                                    : routeNode
+                                      ? "#16a34a"
+                                      : "#cbd5e1"
+                                }
+                                strokeWidth={
+                                  hazard || routeNode ? 4 : 2
+                                }
                               />
 
                               <text
-                                x={node.x + 24}
-                                y={node.y - 20}
+                                x={point.x}
+                                y={point.y - 7}
+                                textAnchor="middle"
+                                fontSize="12"
+                                fontWeight="800"
+                                fill="#0f172a"
+                              >
+                                {node.label}
+                              </text>
+
+                              <text
+                                x={point.x}
+                                y={point.y + 11}
+                                textAnchor="middle"
+                                fontSize="9"
+                                fill="#64748b"
+                              >
+                                {node.id}
+                              </text>
+
+                              {!isCorridor && value > 0 && (
+                                <text
+                                  x={point.x}
+                                  y={point.y + 30}
+                                  textAnchor="middle"
+                                  fontSize="9"
+                                  fontWeight="800"
+                                  fill={getOccupancyColor(value)}
+                                >
+                                  {value} people
+                                </text>
+                              )}
+
+                              {hazard && (
+                                <text
+                                  x={point.x}
+                                  y={y - 8}
+                                  textAnchor="middle"
+                                  fontSize="9"
+                                  fontWeight="900"
+                                  fill="#dc2626"
+                                >
+                                  ⚠ HAZARD / BLOCKED
+                                </text>
+                              )}
+                            </g>
+                          );
+                        })}
+
+                      {/* Stairs / elevators */}
+                      {currentFloorNodes
+                        .filter(
+                          (node) =>
+                            node.type === "stairs" ||
+                            node.type === "elevator"
+                        )
+                        .map((node) => {
+                          const point = floorLayout[node.id];
+
+                          if (!point) {
+                            return null;
+                          }
+
+                          const hazard = isHazard(node.id);
+                          const routeNode = isOnRoute(node.id);
+                          const stairs = node.type === "stairs";
+
+                          return (
+                            <g key={`infra-${node.id}`}>
+                              <rect
+                                x={point.x - 55}
+                                y={point.y - 32}
+                                width="110"
+                                height="64"
+                                rx="12"
+                                fill={
+                                  hazard
+                                    ? "#fee2e2"
+                                    : routeNode
+                                      ? "#dcfce7"
+                                      : stairs
+                                        ? "#fef3c7"
+                                        : "#ede9fe"
+                                }
+                                stroke={
+                                  hazard
+                                    ? "#dc2626"
+                                    : routeNode
+                                      ? "#16a34a"
+                                      : stairs
+                                        ? "#f59e0b"
+                                        : "#8b5cf6"
+                                }
+                                strokeWidth="3"
+                              />
+
+                              <text
+                                x={point.x}
+                                y={point.y + 2}
+                                textAnchor="middle"
+                                fontSize="18"
+                                fontWeight="900"
+                                fill="#0f172a"
+                              >
+                                {stairs ? "S" : "E"}
+                              </text>
+
+                              <text
+                                x={point.x}
+                                y={point.y + 20}
                                 textAnchor="middle"
                                 fontSize="8"
-                                fill="white"
-                                fontWeight="bold"
+                                fontWeight="800"
+                                fill="#475569"
                               >
-                                {nodeOccupancy}
+                                {stairs ? "STAIRWELL" : "ELEVATOR"}
                               </text>
-                            </>
-                          )}
 
-                      </g>
-                    );
-                  }
-                )}
+                              {hazard && (
+                                <text
+                                  x={point.x}
+                                  y={point.y - 42}
+                                  textAnchor="middle"
+                                  fontSize="9"
+                                  fontWeight="900"
+                                  fill="#dc2626"
+                                >
+                                  BLOCKED
+                                </text>
+                              )}
+                            </g>
+                          );
+                        })}
 
-              </svg>
+                      {/* Exits */}
+                      {currentFloorNodes
+                        .filter((node) => node.type === "exit")
+                        .map((node) => {
+                          const point = floorLayout[node.id];
 
-              {/* LEGEND */}
+                          if (!point) {
+                            return null;
+                          }
 
-              <div className="flex flex-wrap gap-5 mt-5 text-sm text-slate-300">
+                          const hazard = isHazard(node.id);
+                          const routeNode = isOnRoute(node.id);
 
-                <div className="flex items-center gap-2">
-                  <span className="w-4 h-4 rounded-full bg-green-600" />
-                  Route
+                          return (
+                            <g key={`exit-${node.id}`}>
+                              <rect
+                                x={point.x - 52}
+                                y={point.y - 30}
+                                width="104"
+                                height="60"
+                                rx="12"
+                                fill={
+                                  hazard
+                                    ? "#fee2e2"
+                                    : routeNode
+                                      ? "#dcfce7"
+                                      : "#dbeafe"
+                                }
+                                stroke={
+                                  hazard
+                                    ? "#dc2626"
+                                    : routeNode
+                                      ? "#16a34a"
+                                      : "#2563eb"
+                                }
+                                strokeWidth="4"
+                              />
+                              <text
+                                x={point.x}
+                                y={point.y - 3}
+                                textAnchor="middle"
+                                fontSize="12"
+                                fontWeight="900"
+                                fill="#0f172a"
+                              >
+                                EXIT
+                              </text>
+                              <text
+                                x={point.x}
+                                y={point.y + 15}
+                                textAnchor="middle"
+                                fontSize="9"
+                                fill="#475569"
+                              >
+                                {node.label}
+                              </text>
+                              {hazard && (
+                                <text
+                                  x={point.x}
+                                  y={point.y - 40}
+                                  textAnchor="middle"
+                                  fontSize="9"
+                                  fontWeight="900"
+                                  fill="#dc2626"
+                                >
+                                  CLOSED
+                                </text>
+                              )}
+                            </g>
+                          );
+                        })}
+
+                      {/* Start marker */}
+                      {route[0] && floorLayout[route[0]] &&
+                        nodeMap[route[0]]?.floor === selectedFloor && (
+                          <g>
+                            <circle
+                              cx={floorLayout[route[0]].x}
+                              cy={floorLayout[route[0]].y}
+                              r="8"
+                              fill="#2563eb"
+                              stroke="white"
+                              strokeWidth="3"
+                            />
+                            <text
+                              x={floorLayout[route[0]].x}
+                              y={floorLayout[route[0]].y - 18}
+                              textAnchor="middle"
+                              fontSize="9"
+                              fontWeight="900"
+                              fill="#2563eb"
+                            >
+                              START
+                            </text>
+                          </g>
+                        )}
+
+                      <text
+                        x="450"
+                        y="520"
+                        textAnchor="middle"
+                        fontSize="13"
+                        fontWeight="900"
+                        fill="#475569"
+                      >
+                        FLOOR {selectedFloor} • LIVE EVACUATION VIEW
+                      </text>
+
+                      {currentFloorNodes.length === 0 && (
+                        <text
+                          x="450"
+                          y="280"
+                          textAnchor="middle"
+                          fontSize="18"
+                          fill="#64748b"
+                        >
+                          No mapped nodes on this floor
+                        </text>
+                      )}
+                    </svg>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap justify-center gap-5 text-xs text-slate-600">
+                    <span><strong className="text-green-700">Green:</strong> recommended route</span>
+                    <span><strong className="text-red-700">Red:</strong> hazard / blocked</span>
+                    <span><strong className="text-amber-700">Amber:</strong> stairs</span>
+                    <span><strong className="text-violet-700">Purple:</strong> elevator</span>
+                  </div>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="w-4 h-4 rounded-full bg-blue-600" />
-                  Exit
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="w-4 h-4 rounded-full bg-orange-400" />
-                  Stairs
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="w-4 h-4 rounded-full bg-purple-500" />
-                  Elevator
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="w-4 h-4 rounded-full bg-red-600" />
-                  Hazard
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="w-4 h-4 rounded-full bg-green-600" />
-                  Low occupancy
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="w-4 h-4 rounded-full bg-orange-400" />
-                  Medium occupancy
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="w-4 h-4 rounded-full bg-red-600" />
-                  High occupancy
-                </div>
-
               </div>
 
-            </section>
+             </section>
+              {/* CROSS-FLOOR ROUTE */}
 
-          </div>
-        )}
-
-        {/* ROUTE DECISION */}
 
         {route.length > 0 && (
           <section className="mt-6 bg-slate-900 rounded-xl p-6">
@@ -1758,6 +1849,10 @@ function isNodeBlocked(
           )}
 
         </section>
+
+          </div>
+
+        )}
 
       </div>
 
