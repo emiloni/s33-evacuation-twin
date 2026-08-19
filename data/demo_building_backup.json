@@ -40,15 +40,6 @@
     },
 
     {
-  "id": "F1_EXIT2",
-  "x": 100,
-  "y": 400,
-  "type": "exit",
-  "floor": 1,
-  "label": "Emergency Exit"
-},
-
-    {
       "id": "F2_N1",
       "x": 100,
       "y": 100,
@@ -359,14 +350,5 @@
       "type": "elevator",
       "accessible": true
     }
-    ,
-
-    {
-  "from": "F1_STAIR_B",
-  "to": "F1_EXIT2",
-  "weight": 2,
-  "type": "corridor",
-  "accessible": true
-}
   ]
 }

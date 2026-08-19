@@ -14,6 +14,7 @@ type Scenario =
   | "fire"
   | "sensor_failure"
   | "exit_closed"
+  | "corridor_blocked"
   | "congestion";
 
 type Sensor = {
@@ -654,7 +655,48 @@ function isNodeBlocked(
         },
       ];
     }
-
+    if (
+      selectedScenario ===
+      "corridor_blocked"
+    ) {
+      return [
+        {
+          id: "T1",
+          type: "temperature",
+          location: "F3_N3",
+          value: 24,
+          available: true,
+        },
+        {
+          id: "S1",
+          type: "smoke",
+          location: "F3_N3",
+          value: 5,
+          available: true,
+        },
+        {
+          id: "O1",
+          type: "occupancy",
+          location: "F3_N2",
+          value: 20,
+          available: true,
+        },
+        {
+          id: "C1",
+          type: "blocked_corridor",
+          location: "F3_N2",
+          value: "blocked",
+          available: true,
+        },
+        {
+          id: "D1",
+          type: "door",
+          location: "F1_EXIT1",
+          value: "open",
+          available: true,
+        },
+      ];
+    }
     if (
       selectedScenario ===
       "congestion"
@@ -1093,6 +1135,10 @@ function isNodeBlocked(
                 <option value="exit_closed">
                   Exit Closed
                 </option>
+
+                <option value="corridor_blocked">
+                    Corridor Blocked
+                  </option>
               </select>
 
               {/* STATUS */}
@@ -1116,7 +1162,36 @@ function isNodeBlocked(
                     )}
                   </p>
                 </div>
+{mode === "conservative" && (
+  <div className="mb-6 rounded-xl border border-amber-500/50 bg-amber-950/40 p-5">
+    <div className="flex items-start gap-3">
+      <div className="text-2xl">⚠️</div>
 
+      <div>
+        <h3 className="text-lg font-bold text-amber-400">
+          CONSERVATIVE MODE
+        </h3>
+
+        <p className="mt-1 text-sm text-amber-200">
+          Safety sensor data is unavailable.
+          The calculated evacuation route is
+          advisory and should be verified against
+          available conditions.
+        </p>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span className="rounded-full bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-300">
+            LOW CONFIDENCE
+          </span>
+
+          <span className="rounded-full bg-slate-700 px-3 py-1 text-xs text-slate-300">
+            SENSOR FAILURE
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
                 <div>
                   <span className="text-sm text-slate-400">
                     System Mode
@@ -1133,7 +1208,21 @@ function isNodeBlocked(
                   </span>
 
                   <p className="text-green-400 font-semibold mt-1">
-                    {confidence}
+
+                  <span
+  className={
+    confidence === "low"
+      ? "font-bold text-amber-400"
+      : confidence === "medium"
+        ? "font-bold text-yellow-400"
+        : "font-bold text-green-400"
+  }
+>
+  {confidence}
+</span>
+
+
+
                   </p>
                 </div>
 

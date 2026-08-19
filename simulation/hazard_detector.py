@@ -182,7 +182,16 @@ def detect_hazards(
                     "blocked_corridor"
                 )
                 severity = "high"
+            # --------------------------------------------------
+# Blocked corridor → blocked corridor
+# --------------------------------------------------
 
+        elif (
+            sensor_type == "blocked_corridor"
+            and value == "blocked"
+        ):
+            hazard_type = "blocked_corridor"
+            severity = "high"
         # --------------------------------------------------
         # Door → closed exit
         # --------------------------------------------------
