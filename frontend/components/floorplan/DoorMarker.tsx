@@ -1,5 +1,4 @@
 import type { Door } from "@/lib/schema";
-import { COLORS } from "@/lib/design-tokens";
 
 interface DoorMarkerProps {
   door: Door;
@@ -18,47 +17,71 @@ export default function DoorMarker({
     <g
       transform={`translate(${position.x} ${position.y}) rotate(${angle})`}
     >
-      {/* Door opening cut-out */}
+      {/* Door opening cut-out for dark canvas */}
       <line
         x1="-17"
         y1="0"
         x2="17"
         y2="0"
-        stroke="#F7F7F3"
+        stroke="#0B0F17"
         strokeWidth="10"
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
 
-      {/* Door frame */}
+      {/* Left door frame post */}
       <line
         x1="-17"
-        y1="0"
-        x2="17"
-        y2="0"
-        stroke={COLORS.wall}
-        strokeWidth="2"
+        y1="-4"
+        x2="-17"
+        y2="4"
+        stroke="#F8FAFC"
+        strokeWidth="3"
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
 
-      {/* Door leaf */}
+      {/* Right door frame post */}
       <line
-        x1="0"
+        x1="17"
+        y1="-4"
+        x2="17"
+        y2="4"
+        stroke="#F8FAFC"
+        strokeWidth="3"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+
+      {/* Left open door leaf (Swung 75° leftward) */}
+      <line
+        x1="-17"
         y1="0"
-        x2="0"
-        y2="-24"
-        stroke={COLORS.ink}
+        x2="-24"
+        y2="-13"
+        stroke="#38BDF8"
         strokeWidth="2.5"
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
 
-      {/* Door swing arc */}
+      {/* Right open door leaf (Swung 75° rightward) */}
+      <line
+        x1="17"
+        y1="0"
+        x2="24"
+        y2="-13"
+        stroke="#38BDF8"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+
+      {/* Dual door swing arcs */}
       <path
-        d="M 0 -24 A 24 24 0 0 1 24 0"
+        d="M 0 0 A 17 17 0 0 1 -24 -13 M 0 0 A 17 17 0 0 0 24 -13"
         fill="none"
-        stroke={COLORS.muted}
+        stroke="#10B981"
         strokeWidth="1.5"
         strokeDasharray="3 3"
         vectorEffect="non-scaling-stroke"
@@ -71,8 +94,8 @@ export default function DoorMarker({
             cx="0"
             cy="9"
             r="6"
-            fill="#FFFFFF"
-            stroke={COLORS.accentTeal}
+            fill="#0F172A"
+            stroke="#10B981"
             strokeWidth="1.5"
             vectorEffect="non-scaling-stroke"
           />
@@ -83,8 +106,8 @@ export default function DoorMarker({
             textAnchor="middle"
             fontSize="7"
             fontWeight="800"
-            fill={COLORS.accentTeal}
-            fontFamily="Inter, sans-serif"
+            fill="#10B981"
+            fontFamily="ui-monospace, monospace"
           >
             A
           </text>

@@ -1,6 +1,6 @@
 import type { Point } from "@/lib/schema";
 import { polygonToSvgPoints } from "@/lib/geometry-utils";
-import { BUILDING_OUTLINE_WIDTH, COLORS } from "@/lib/design-tokens";
+import { BUILDING_OUTLINE_WIDTH } from "@/lib/design-tokens";
 
 interface BuildingOutlineProps {
   polygon: Point[];
@@ -9,38 +9,38 @@ interface BuildingOutlineProps {
 export default function BuildingOutline({
   polygon,
 }: BuildingOutlineProps) {
-  if (!polygon.length) return null;
+  if (!polygon || !polygon.length) return null;
 
   return (
     <g pointerEvents="none">
-      {/* Soft exterior halo */}
+      {/* Exterior glow halo */}
       <polygon
         points={polygonToSvgPoints(polygon)}
         fill="none"
-        stroke={COLORS.ink}
+        stroke="#38BDF8"
         strokeWidth={BUILDING_OUTLINE_WIDTH + 8}
-        strokeOpacity={0.06}
+        strokeOpacity={0.1}
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
       />
 
-      {/* Main architectural boundary */}
+      {/* Main architectural boundary wall */}
       <polygon
         points={polygonToSvgPoints(polygon)}
         fill="none"
-        stroke={COLORS.ink}
+        stroke="#F8FAFC"
         strokeWidth={BUILDING_OUTLINE_WIDTH}
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
       />
 
-      {/* Inner boundary accent */}
+      {/* Inner boundary accent line */}
       <polygon
         points={polygonToSvgPoints(polygon)}
         fill="none"
-        stroke="#FFFFFF"
+        stroke="#1E293B"
         strokeWidth={1.5}
-        strokeOpacity={0.75}
+        strokeOpacity={0.8}
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
       />

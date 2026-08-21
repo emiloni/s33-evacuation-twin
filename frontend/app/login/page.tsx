@@ -31,86 +31,82 @@ export default function LoginPage() {
     }
   }, [searchParams]);
 
-  async function handleLogin(
-    event: FormEvent<HTMLFormElement>
-  ) {
-    event.preventDefault();
+async function handleLogin(
+  event: FormEvent<HTMLFormElement>
+) {
+  event.preventDefault();
 
-    setError("");
-    setRegistered(false);
+  setError("");
+  setRegistered(false);
 
-    if (!email.trim() || !password) {
-      setError(
-        "Please enter your email and password."
-      );
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      const response = await fetch(
-        `${BACKEND_HTTP}/api/v1/auth/login`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: email.trim(),
-            password,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.detail ||
-            "Invalid email or password."
-        );
-      }
-
-      /*
-       * Save the logged-in user locally for now.
-       *
-       * We'll replace this with proper JWT/session
-       * authentication in the next step.
-       */
-     if (!data.access_token) {
-        throw new Error(
-            "Login succeeded but no authentication token was received."
-        );
-        }
-
-        localStorage.setItem(
-        "s33-token",
-        data.access_token
-        );
-
-        localStorage.setItem(
-        "s33-user",
-        JSON.stringify(data.user)
-        );
-
-        localStorage.setItem(
-        "s33-authenticated",
-        "true"
-        );
-
-        router.push("/dashboard");
-
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to log in."
-      );
-    } finally {
-      setLoading(false);
-    }
+  if (!email.trim() || !password) {
+    setError(
+      "Please enter your email and password."
+    );
+    return;
   }
+
+  try {
+    setLoading(true);
+
+    const response = await fetch(
+      `${BACKEND_HTTP}/api/v1/auth/login`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.detail ||
+          "Invalid email or password."
+      );
+    }
+
+    if (!data.access_token) {
+      throw new Error(
+        "Login succeeded but no authentication token was received."
+      );
+    }
+
+    // Store JWT using the key expected by the dashboard
+    localStorage.setItem(
+      "s33_access_token",
+      data.access_token
+    );
+
+    // Keep the user information
+    localStorage.setItem(
+      "s33_user",
+      JSON.stringify(data.user)
+    );
+
+    // Used by the authenticated dashboard
+    localStorage.setItem(
+      "s33-authenticated",
+      "true"
+    );
+
+    router.push("/dashboard");
+  } catch (err) {
+    setError(
+      err instanceof Error
+        ? err.message
+        : "Unable to log in."
+    );
+  } finally {
+    setLoading(false);
+  }
+}
 
   return (
     <main className="min-h-screen bg-[#F5F8F7] text-slate-950">

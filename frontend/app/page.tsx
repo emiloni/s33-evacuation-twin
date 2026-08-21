@@ -220,14 +220,14 @@ export default function Home() {
               </button>
 
               <button
-                onClick={() => router.push("/dashboard")}
+                onClick={() => router.push("/emergency")}
                 className="rounded-xl border border-slate-300 bg-white px-7 py-4 text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
               >
                 Live Evacuation →
               </button>
 
               <button
-                onClick={() => router.push("/dashboard")}
+                onClick={() => router.push("/buildings/new")}
                 className="rounded-xl border border-slate-300 bg-white px-7 py-4 text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
               >
                 Building Administration →

@@ -1,31 +1,13 @@
-# Python
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-
-# Virtual environments
-venv/
-.venv/
-backend/venv/
-
-# Environment variables
+node_modules/
+.next/
 .env
 .env.local
 .env.*.local
 
-# Next.js
-frontend/node_modules/
-frontend/.next/
-frontend/out/
+__pycache__/
+*.pyc
+.venv/
+venv/
 
-# Logs
-*.log
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
+*.db
+*.sqlite3

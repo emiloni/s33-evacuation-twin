@@ -3,7 +3,6 @@ import {
   polygonCentroid,
   polygonToSvgPoints,
 } from "@/lib/geometry-utils";
-import { COLORS } from "@/lib/design-tokens";
 
 interface StairwellBlockProps {
   stairwell: Stairwell;
@@ -23,8 +22,8 @@ export default function StairwellBlock({
         points={polygonToSvgPoints(
           stairwell.polygon
         )}
-        fill="#FFFFFF"
-        stroke={COLORS.ink}
+        fill="#1F2937"
+        stroke="#475569"
         strokeWidth={3}
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
@@ -43,7 +42,7 @@ export default function StairwellBlock({
               y1={y}
               x2={centroid.x + 22}
               y2={y}
-              stroke={COLORS.muted}
+              stroke="#64748B"
               strokeWidth={1.5}
               vectorEffect="non-scaling-stroke"
             />
@@ -58,8 +57,10 @@ export default function StairwellBlock({
         width={52}
         height={18}
         rx={4}
-        fill="#FFFFFF"
-        fillOpacity={0.9}
+        fill="#0F172A"
+        fillOpacity={0.92}
+        stroke="#334155"
+        strokeWidth={1}
       />
 
       <text
@@ -68,8 +69,8 @@ export default function StairwellBlock({
         textAnchor="middle"
         fontSize={7.5}
         fontWeight={800}
-        fill={COLORS.ink}
-        fontFamily="Inter, sans-serif"
+        fill="#F8FAFC"
+        fontFamily="ui-monospace, monospace"
         letterSpacing="0.8px"
       >
         STAIRS

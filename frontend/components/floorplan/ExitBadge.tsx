@@ -1,5 +1,4 @@
 import type { ExitPoint } from "@/lib/schema";
-import { COLORS } from "@/lib/design-tokens";
 
 interface ExitBadgeProps {
   exit: ExitPoint;
@@ -20,58 +19,48 @@ export default function ExitBadge({
   exit,
   highlighted = false,
 }: ExitBadgeProps) {
-  const rotation =
-    directionRotation[exit.direction];
+  const rotation = directionRotation[exit.direction];
 
   return (
     <g
       transform={`translate(${exit.position.x} ${exit.position.y})`}
       pointerEvents="none"
     >
-      {/* ================================================= */}
-      {/* EXIT AREA HIGHLIGHT                               */}
-      {/* ================================================= */}
-
+      {/* EXIT AREA HIGHLIGHT */}
       {highlighted && (
         <>
           <circle
             r="34"
-            fill={COLORS.safeZone}
-            opacity="0.12"
+            fill="#064E3B"
+            opacity="0.25"
           />
 
           <circle
             r="28"
             fill="none"
-            stroke={COLORS.accentTeal}
+            stroke="#10B981"
             strokeWidth="2"
             strokeDasharray="5 4"
-            opacity="0.75"
+            opacity="0.85"
             vectorEffect="non-scaling-stroke"
           />
         </>
       )}
 
-      {/* ================================================= */}
-      {/* EXIT SIGN                                         */}
-      {/* ================================================= */}
-
+      {/* EXIT SIGN BODY */}
       <rect
         x="-23"
         y="-17"
         width="46"
         height="34"
         rx="8"
-        fill="#FFFFFF"
-        stroke={COLORS.accentTeal}
+        fill="#0F172A"
+        stroke="#10B981"
         strokeWidth="2.5"
         vectorEffect="non-scaling-stroke"
       />
 
-      {/* ================================================= */}
-      {/* DIRECTION ARROW                                   */}
-      {/* ================================================= */}
-
+      {/* DIRECTION ARROW */}
       <g transform={`rotate(${rotation})`}>
         <path
           d="
@@ -84,40 +73,34 @@ export default function ExitBadge({
             L -9 -1
             Z
           "
-          fill={COLORS.accentTeal}
+          fill="#10B981"
         />
       </g>
 
-      {/* ================================================= */}
-      {/* EXIT LABEL                                        */}
-      {/* ================================================= */}
-
+      {/* EXIT LABEL */}
       <text
         x="0"
         y="29"
         textAnchor="middle"
         fontSize="8"
         fontWeight="800"
-        fill={COLORS.accentTeal}
-        fontFamily="Inter, sans-serif"
+        fill="#10B981"
+        fontFamily="ui-monospace, monospace"
         letterSpacing="1px"
       >
         EXIT
       </text>
 
-      {/* ================================================= */}
-      {/* ACCESSIBILITY INDICATOR                           */}
-      {/* ================================================= */}
-
+      {/* ACCESSIBILITY INDICATOR */}
       {exit.accessible && (
         <circle
           cx="0"
           cy="0"
           r="26"
           fill="none"
-          stroke={COLORS.accentTeal}
+          stroke="#10B981"
           strokeWidth="1"
-          strokeOpacity="0.3"
+          strokeOpacity="0.4"
           vectorEffect="non-scaling-stroke"
         />
       )}

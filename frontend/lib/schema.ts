@@ -1,7 +1,23 @@
-export type Point = { x: number; y: number };
+export type Point = {
+  x: number;
+  y: number;
+};
+export type RoutePoint = Point & {
+  level?: number;
+};
 
-export type RoomType = 'office' | 'corridor' | 'lobby' | 'meeting_room' | 'break_room' | 'other';
-export type Confidence = 'high' | 'medium' | 'low';
+export type RoomType =
+  | "office"
+  | "corridor"
+  | "lobby"
+  | "meeting_room"
+  | "break_room"
+  | "other";
+
+export type Confidence =
+  | "high"
+  | "medium"
+  | "low";
 
 export interface Room {
   id: string;
@@ -24,69 +40,16 @@ export interface ExitPoint {
   id: string;
   position: Point;
   accessible: boolean;
-  direction: 'up' | 'down' | 'left' | 'right';
+  direction:
+    | "up"
+    | "down"
+    | "left"
+    | "right";
 }
 
 export interface Stairwell {
   id: string;
   polygon: Point[];
-}
-
-export interface VerticalConnector {
-  id: string;
-  type: 'stairs' | 'elevator';
-  connectsFloors: number[];
-  positionByFloor: { floor: number; x: number; y: number }[];
-  accessibleDuringHazard: Record<string, boolean>;
-}
-
-export interface FloorGeometry {
-  floorLevel: number;
-
-  rooms: Room[];
-
-  doors: Door[];
-
-  exits: ExitPoint[];
-
-  stairwells: Stairwell[];
-
-  connections: FloorConnection[];
-
-  buildingOutline?: Point[];
-
-  hazards?: Hazard[];
-}
-
-export interface Building {
-  floors: FloorGeometry[];
-  connectors: VerticalConnector[];
-}
-
-export type MobilityProfile = 'normal' | 'wheelchair' | 'child' | 'elderly' | 'temporary_injury';
-export type HazardType = 'fire' | 'flood' | 'blocked_corridor' | 'closed_exit';
-
-export interface Occupant {
-  id: string;
-  roomId: string;
-  position: Point;
-  profile: MobilityProfile;
-}
-
-export interface Hazard {
-  id: string;
-  type: HazardType;
-  position: Point;
-  severity: 'low' | 'medium' | 'high';
-}
-
-export interface RouteSegment {
-  occupantId: string;
-  path: Point[];
-  eta: number;
-  exitId: string;
-  confidence: Confidence;
-  basis: 'live_sensors' | 'static_fallback';
 }
 
 export interface FloorConnection {
@@ -98,4 +61,79 @@ export interface FloorConnection {
     | "stairs"
     | "elevator";
   accessible: boolean;
+}
+
+export interface VerticalConnector {
+  id: string;
+  type: "stairs" | "elevator";
+  connectsFloors: number[];
+  positionByFloor: {
+    floor: number;
+    x: number;
+    y: number;
+  }[];
+  accessibleDuringHazard: Record<
+    string,
+    boolean
+  >;
+}
+
+export interface FloorGeometry {
+  floorLevel: number;
+  rooms: Room[];
+  doors: Door[];
+  exits: ExitPoint[];
+  stairwells: Stairwell[];
+  connections: FloorConnection[];
+  buildingOutline?: Point[];
+  hazards?: Hazard[];
+}
+
+export interface Building {
+  floors: FloorGeometry[];
+  connectors: VerticalConnector[];
+}
+
+export type MobilityProfile =
+  | "normal"
+  | "wheelchair"
+  | "child"
+  | "elderly"
+  | "temporary_injury"
+  | "first_responder";
+
+export type HazardType =
+  | "fire"
+  | "flood"
+  | "blocked_corridor"
+  | "closed_exit";
+
+export interface Occupant {
+  id: string;
+  roomId: string;
+  position: Point;
+  profile: MobilityProfile;
+  floorLevel?: number;
+}
+
+export interface Hazard {
+  id: string;
+  type: HazardType;
+  position: Point;
+  severity:
+    | "low"
+    | "medium"
+    | "high";
+}
+
+export interface RouteSegment {
+  occupantId: string;
+  path: RoutePoint[];
+  eta: number;
+  exitId: string;
+  confidence: Confidence;
+  basis:
+    | "live_sensors"
+    | "static_fallback";
+  isRerouted?: boolean;
 }
