@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function Home() {
   const router = useRouter();
+  const uploadRef = useRef<HTMLDivElement>(null);
 
   const [showUpload, setShowUpload] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -49,11 +50,9 @@ export default function Home() {
     setShowUpload(true);
 
     setTimeout(() => {
-      document
-        .getElementById("building-setup")
-        ?.scrollIntoView({
-          behavior: "smooth",
-        });
+      uploadRef.current?.scrollIntoView({
+        behavior: "smooth",
+      });
     }, 50);
   };
 
@@ -78,6 +77,8 @@ export default function Home() {
       return;
     }
 
+    // Temporary frontend storage.
+    // Later this will be sent to our backend.
     const projectData = {
       ...form,
       fileName: file.name,
@@ -90,7 +91,7 @@ export default function Home() {
       JSON.stringify(projectData)
     );
 
-    router.push("/dashboard");
+    router.push("/");
   };
 
   return (
@@ -121,62 +122,18 @@ export default function Home() {
 
       <section className="relative z-10 mx-auto max-w-[1280px] px-6 pb-20 pt-10">
 
-        {/* TOP NAV */}
+        {/* Badge */}
 
-        <div className="flex items-center justify-between">
-
-          <div className="flex items-center gap-3">
-
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-sm font-black text-white shadow-lg">
-              S33
-            </div>
-
-            <div>
-              <div className="text-sm font-black tracking-tight text-slate-950">
-                Evacuation Digital Twin
-              </div>
-
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                Safety Intelligence
-              </div>
-            </div>
-
-          </div>
-
-          <div className="flex items-center gap-2">
-
-            <button
-              onClick={() => router.push("/login")}
-              className="hidden rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-white hover:text-slate-950 sm:block"
-            >
-              Log in
-            </button>
-
-            <button
-              onClick={() => router.push("/signup")}
-              className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-black text-slate-900 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-            >
-              Sign up
-            </button>
-
-          </div>
-
-        </div>
-
-        {/* HERO BADGE */}
-
-        <div className="mt-12 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-emerald-700">
+        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-emerald-700">
           <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
           Advisory Evacuation Intelligence
         </div>
 
-        {/* HERO GRID */}
+        {/* Hero grid */}
 
         <div className="mt-12 grid items-center gap-16 lg:grid-cols-[1fr_0.9fr]">
 
-          {/* =================================================
-              LEFT
-          ================================================== */}
+          {/* LEFT */}
 
           <div>
 
@@ -199,35 +156,33 @@ export default function Home() {
             </h1>
 
             <p className="mt-8 max-w-[650px] text-lg leading-9 text-slate-500">
-              S33 converts building information into a
-              structured digital twin that understands rooms,
-              corridors, exits, hazards and mobility
-              constraints — then generates dynamic evacuation
-              recommendations.
+              Upload an existing building floor plan. S33
+              converts it into a structured digital twin that
+              can understand rooms, corridors, exits, hazards
+              and mobility constraints — then generate
+              dynamic evacuation recommendations.
             </p>
 
-            {/* =================================================
-                HERO BUTTONS
-            ================================================== */}
+            {/* Buttons */}
 
             <div className="mt-10 flex flex-wrap gap-3">
 
               <button
-                onClick={() => router.push("/signup")}
+                onClick={openUpload}
                 className="rounded-xl bg-slate-950 px-7 py-4 text-sm font-black text-white shadow-xl shadow-slate-900/20 transition hover:-translate-y-0.5 hover:bg-slate-800"
               >
-                Get Started →
+                Upload floor plan
               </button>
 
               <button
-                onClick={() => router.push("/dashboard")}
+                onClick={() => router.push("/")}
                 className="rounded-xl border border-slate-300 bg-white px-7 py-4 text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
               >
                 Live Evacuation →
               </button>
 
               <button
-                onClick={() => router.push("/dashboard")}
+                onClick={() => router.push("/")}
                 className="rounded-xl border border-slate-300 bg-white px-7 py-4 text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
               >
                 Building Administration →
@@ -235,9 +190,7 @@ export default function Home() {
 
             </div>
 
-            {/* =================================================
-                FEATURE POINTS
-            ================================================== */}
+            {/* Feature points */}
 
             <div className="mt-12 flex flex-wrap gap-x-8 gap-y-3 text-xs font-bold text-slate-400">
 
@@ -289,7 +242,7 @@ export default function Home() {
 
               </div>
 
-              {/* MINI FLOOR PLAN */}
+              {/* Mini floor plan */}
 
               <div
                 className="relative mt-5 h-[440px] overflow-hidden rounded-2xl"
@@ -342,7 +295,7 @@ export default function Home() {
 
                 </div>
 
-                {/* ROUTE */}
+                {/* Route */}
 
                 <svg
                   className="absolute inset-0 h-full w-full"
@@ -373,7 +326,7 @@ export default function Home() {
 
                 </svg>
 
-                {/* ROUTE BADGE */}
+                {/* Route badge */}
 
                 <div className="absolute right-4 top-4 rounded-xl bg-white px-4 py-3 shadow-lg">
 
@@ -394,122 +347,19 @@ export default function Home() {
           </div>
 
         </div>
-
       </section>
 
       {/* =====================================================
-          QUICK ACCESS
-      ====================================================== */}
-
-      <section className="relative z-10 border-y border-slate-200 bg-white/80 px-6 py-10 backdrop-blur">
-
-        <div className="mx-auto max-w-[1100px]">
-
-          <div className="grid gap-4 md:grid-cols-3">
-
-            <button
-              onClick={() => router.push("/signup")}
-              className="group rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-emerald-300 hover:shadow-lg"
-            >
-
-              <div className="flex items-center justify-between">
-
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-xl">
-                  →
-                </div>
-
-                <span className="text-slate-300 transition group-hover:text-emerald-500">
-                  ↗
-                </span>
-
-              </div>
-
-              <div className="mt-5 text-lg font-black">
-                Create your workspace
-              </div>
-
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                Create an account and save your buildings,
-                simulations and evacuation configurations.
-              </p>
-
-            </button>
-
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="group rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-emerald-300 hover:shadow-lg"
-            >
-
-              <div className="flex items-center justify-between">
-
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-xl">
-                  ◉
-                </div>
-
-                <span className="text-slate-300 transition group-hover:text-emerald-500">
-                  ↗
-                </span>
-
-              </div>
-
-              <div className="mt-5 text-lg font-black">
-                Live evacuation
-              </div>
-
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                Monitor hazards, occupancy and dynamic
-                evacuation routes in real time.
-              </p>
-
-            </button>
-
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="group rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-emerald-300 hover:shadow-lg"
-            >
-
-              <div className="flex items-center justify-between">
-
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-xl">
-                  ▦
-                </div>
-
-                <span className="text-slate-300 transition group-hover:text-emerald-500">
-                  ↗
-                </span>
-
-              </div>
-
-              <div className="mt-5 text-lg font-black">
-                Building administration
-              </div>
-
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                Manage building layouts, floors, exits,
-                corridors and safety configuration.
-              </p>
-
-            </button>
-
-          </div>
-
-        </div>
-
-      </section>
-
-      {/* =====================================================
-          BUILDING SETUP
+          UPLOAD / BUILDING SETUP
       ====================================================== */}
 
       {showUpload && (
         <section
-          id="building-setup"
+          ref={uploadRef}
           className="relative z-20 border-t border-slate-200 bg-white px-6 py-20"
         >
 
           <div className="mx-auto max-w-[1000px]">
-
-            {/* HEADER */}
 
             <div className="text-center">
 
@@ -522,16 +372,18 @@ export default function Home() {
               </h2>
 
               <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-slate-500">
-                Upload your floor plan and provide some
-                context. This information helps S33 generate
-                better evacuation recommendations.
+                Upload your floor plan and provide some context.
+                This information helps S33 generate better
+                evacuation recommendations.
               </p>
 
             </div>
 
             <div className="mt-10 grid gap-6 lg:grid-cols-2">
 
-              {/* USER TYPE */}
+              {/* =================================================
+                  USER TYPE
+              ================================================== */}
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 lg:col-span-2">
 
@@ -550,26 +402,22 @@ export default function Home() {
                     {
                       value: "safety_officer",
                       title: "Safety Officer",
-                      description:
-                        "Emergency planning & response",
+                      description: "Emergency planning & response",
                     },
                     {
                       value: "facility_manager",
                       title: "Facility Manager",
-                      description:
-                        "Building operations",
+                      description: "Building operations",
                     },
                     {
                       value: "business_owner",
                       title: "Business Owner",
-                      description:
-                        "Protect employees & visitors",
+                      description: "Protect employees & visitors",
                     },
                     {
                       value: "emergency_planner",
                       title: "Emergency Planner",
-                      description:
-                        "Scenario simulation",
+                      description: "Scenario simulation",
                     },
                   ].map((option) => (
 
@@ -602,10 +450,11 @@ export default function Home() {
                   ))}
 
                 </div>
-
               </div>
 
-              {/* BUILDING NAME */}
+              {/* =================================================
+                  BUILDING INFORMATION
+              ================================================== */}
 
               <div className="rounded-2xl border border-slate-200 bg-white p-6">
 
@@ -626,8 +475,6 @@ export default function Home() {
                 />
 
               </div>
-
-              {/* BUILDING TYPE */}
 
               <div className="rounded-2xl border border-slate-200 bg-white p-6">
 
@@ -690,8 +537,6 @@ export default function Home() {
 
               </div>
 
-              {/* FLOORS */}
-
               <div className="rounded-2xl border border-slate-200 bg-white p-6">
 
                 <label className="text-xs font-black uppercase tracking-wider text-slate-500">
@@ -712,8 +557,6 @@ export default function Home() {
                 />
 
               </div>
-
-              {/* OCCUPANTS */}
 
               <div className="rounded-2xl border border-slate-200 bg-white p-6">
 
@@ -737,7 +580,9 @@ export default function Home() {
 
               </div>
 
-              {/* ACCESSIBILITY */}
+              {/* =================================================
+                  ACCESSIBILITY
+              ================================================== */}
 
               <div className="rounded-2xl border border-slate-200 bg-white p-6">
 
@@ -789,7 +634,9 @@ export default function Home() {
 
               </div>
 
-              {/* HAZARDS */}
+              {/* =================================================
+                  HAZARDS
+              ================================================== */}
 
               <div className="rounded-2xl border border-slate-200 bg-white p-6">
 
@@ -807,10 +654,7 @@ export default function Home() {
                     ["fire_risk", "Fire risk areas"],
                     ["flood_risk", "Flood-prone areas"],
                     ["restricted_exit", "Restricted exits"],
-                    [
-                      "construction",
-                      "Construction / blocked areas",
-                    ],
+                    ["construction", "Construction / blocked areas"],
                   ].map(([value, label]) => (
 
                     <label
@@ -844,7 +688,9 @@ export default function Home() {
 
               </div>
 
-              {/* FLOOR PLAN */}
+              {/* =================================================
+                  FLOOR PLAN UPLOAD
+              ================================================== */}
 
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 lg:col-span-2">
 
@@ -887,7 +733,9 @@ export default function Home() {
 
             </div>
 
-            {/* SUBMIT */}
+            {/* =================================================
+                SUBMIT
+            ================================================== */}
 
             <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:flex-row">
 
@@ -917,52 +765,6 @@ export default function Home() {
 
         </section>
       )}
-
-      {/* =====================================================
-          FOOTER
-      ====================================================== */}
-
-      <footer className="relative z-10 border-t border-slate-200 bg-white px-6 py-8">
-
-        <div className="mx-auto flex max-w-[1280px] flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left">
-
-          <div>
-
-            <div className="text-sm font-black text-slate-900">
-              S33 Evacuation Digital Twin
-            </div>
-
-            <div className="mt-1 text-xs text-slate-400">
-              Intelligent, accessibility-aware evacuation advisory.
-            </div>
-
-          </div>
-
-          <div className="flex items-center gap-5 text-xs font-bold text-slate-400">
-
-            <button
-              onClick={() => router.push("/login")}
-              className="transition hover:text-slate-900"
-            >
-              Login
-            </button>
-
-            <button
-              onClick={() => router.push("/signup")}
-              className="transition hover:text-slate-900"
-            >
-              Sign up
-            </button>
-
-            <span>
-              © {new Date().getFullYear()} S33
-            </span>
-
-          </div>
-
-        </div>
-
-      </footer>
 
     </main>
   );
