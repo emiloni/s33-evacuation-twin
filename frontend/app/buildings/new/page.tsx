@@ -7,10 +7,16 @@ import {
 } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { buildBuildingGeometry } from "@/lib/building-to-floor-geometry";
+import type { BuildingDefinition } from "@/lib/buildings-registry";
+import type { Occupant } from "@/lib/schema";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:8000/api";
+const BACKEND_HTTP =
+  process.env.NEXT_PUBLIC_BACKEND_HTTP ||
+  "http://127.0.0.1:8000";
+
+const API_V1 =
+  `${BACKEND_HTTP}/api/v1`;
 
 type BuildingType =
   | "office"
@@ -165,144 +171,409 @@ export default function NewBuildingPage() {
       const token =
         localStorage.getItem(
           "s33_access_token"
+        ) ||
+        localStorage.getItem(
+          "s33-token"
         );
+
+      if (!token) {
+        router.push("/login");
+        return;
+      }
 
       /*
        * STEP 1
        *
-       * Create the building record.
+       * Analyze every uploaded floor plan with the S33 AI parser.
        *
        * Backend:
        *
-       * POST /api/buildings
+       * POST /api/v1/building/ai-parse
        */
 
-      const buildingResponse =
-        await fetch(
-          `${API_BASE_URL}/buildings`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
+      const allNodes: Array<{
+        id: string;
+        x: number;
+        y: number;
+        floor: number;
+        type: string;
+        label: string;
+      }> = [];
 
-              ...(token
-                ? {
-                    Authorization: `Bearer ${token}`,
-                  }
-                : {}),
-            },
-
-            body: JSON.stringify({
-              name: buildingName.trim(),
-
-              address: address.trim(),
-
-              buildingType,
-
-              floors: Number(floors),
-
-              normalOccupancy:
-                Number(normalOccupancy),
-
-              accessibility: {
-                wheelchairAccessible,
-
-                accessibleExits,
-
-                elevatorAvailable,
-              },
-
-              assemblyArea:
-                assemblyArea.trim(),
-            }),
-          }
-        );
-
-      if (!buildingResponse.ok) {
-        throw new Error(
-          "Unable to create building."
-        );
-      }
-
-      const buildingData =
-        await buildingResponse.json();
-
-      const buildingId =
-        buildingData.id ||
-        buildingData.building?.id;
-
-      if (!buildingId) {
-        throw new Error(
-          "Building was created but no building ID was returned."
-        );
-      }
-
-      /*
-       * STEP 2
-       *
-       * Upload each floor plan.
-       *
-       * Backend:
-       *
-       * POST
-       * /api/buildings/{buildingId}/floors
-       *
-       * multipart/form-data
-       */
+      const allEdges: Array<{
+        from: string;
+        to: string;
+        weight: number;
+        type: string;
+        accessible: boolean;
+      }> = [];
 
       for (const floor of floorUploads) {
         if (!floor.file) {
           continue;
         }
 
-        const formData =
-          new FormData();
+        const aiFormData = new FormData();
+        aiFormData.append("file", floor.file);
 
-        formData.append(
-          "floor",
-          String(floor.floor)
+        const aiResponse = await fetch(
+          `${API_V1}/building/ai-parse`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            body: aiFormData,
+          }
         );
 
-        formData.append(
-          "file",
-          floor.file
-        );
+        let aiData: any;
 
-        const floorResponse =
-          await fetch(
-            `${API_BASE_URL}/buildings/${buildingId}/floors`,
-            {
-              method: "POST",
-
-              headers: token
-                ? {
-                    Authorization: `Bearer ${token}`,
-                  }
-                : undefined,
-
-              body: formData,
-            }
-          );
-
-        if (!floorResponse.ok) {
+        try {
+          aiData = await aiResponse.json();
+        } catch {
           throw new Error(
-            `Floor ${floor.floor} upload failed.`
+            `AI analysis returned an invalid response for Floor ${floor.floor}.`
           );
         }
+
+        if (!aiResponse.ok || !aiData?.success) {
+          throw new Error(
+            aiData?.detail ||
+              aiData?.message ||
+              `AI analysis failed for Floor ${floor.floor}.`
+          );
+        }
+
+        const nodeIdMap = new Map<string, string>();
+
+        const parsedBuilding =
+          aiData?.building || {};
+
+        const parsedNodes =
+          Array.isArray(parsedBuilding.nodes)
+            ? parsedBuilding.nodes
+            : [];
+
+        const parsedEdges =
+          Array.isArray(parsedBuilding.edges)
+            ? parsedBuilding.edges
+            : [];
+
+        const floorNodes = parsedNodes.map(
+          (node: any, index: number) => {
+            const originalId = String(
+              node.id || `AI_N${index + 1}`
+            );
+
+            const normalizedId =
+              `F${floor.floor}_${originalId}`;
+
+            nodeIdMap.set(
+              originalId,
+              normalizedId
+            );
+
+            return {
+              id: normalizedId,
+              x: Number(node.x) || 0,
+              y: Number(node.y) || 0,
+              floor: floor.floor,
+              type: String(
+                node.type || "room"
+              ),
+              label: String(
+                node.label || originalId
+              ),
+            };
+          }
+        );
+
+       const floorEdges: Array<{
+  from: string;
+  to: string;
+  weight: number;
+  type: string;
+  accessible: boolean;
+}> = [];
+
+for (const edge of parsedEdges) {
+  const originalFrom =
+    typeof edge?.from === "string"
+      ? edge.from.trim()
+      : "";
+
+  const originalTo =
+    typeof edge?.to === "string"
+      ? edge.to.trim()
+      : "";
+
+  // Ignore malformed edges.
+  if (!originalFrom || !originalTo) {
+    continue;
+  }
+
+  const normalizedFrom =
+    nodeIdMap.get(originalFrom);
+
+  const normalizedTo =
+    nodeIdMap.get(originalTo);
+
+  // Ignore edges whose endpoints were
+  // not detected as nodes on this floor.
+  if (!normalizedFrom || !normalizedTo) {
+    continue;
+  }
+
+  floorEdges.push({
+    from: normalizedFrom,
+    to: normalizedTo,
+    weight:
+      Number(edge.weight) || 1,
+    type: String(
+      edge.type || "corridor"
+    ),
+    accessible:
+      Boolean(edge.accessible),
+  });
+}
+
+allNodes.push(...floorNodes);
+allEdges.push(...floorEdges);
+
+        allNodes.push(...floorNodes);
+        allEdges.push(...floorEdges);
+      }
+
+      if (allNodes.length === 0) {
+        throw new Error(
+          "AI analysis completed but no building nodes were detected."
+        );
       }
 
       /*
-       * Everything succeeded.
+       * STEP 2
+       *
+       * Send the complete AI-generated BuildingDataset to the
+       * deterministic S33 backend validator/activator.
+       *
+       * Backend:
+       *
+       * POST /api/v1/building
        */
 
+      const dataset = {
+        building: {
+          id: "AI_BUILDING_1",
+          name:
+            buildingName.trim() ||
+            "AI Generated Building",
+          floors: Number(floors),
+          address: address.trim(),
+          buildingType,
+          normalOccupancy:
+            Number(normalOccupancy),
+          accessibility: {
+            wheelchairAccessible,
+            accessibleExits,
+            elevatorAvailable,
+          },
+          assemblyArea:
+            assemblyArea.trim(),
+        },
+        nodes: allNodes,
+        edges: allEdges,
+      };
+
+      const buildingResponse =
+        await fetch(
+          `${API_V1}/building`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Authorization:
+                `Bearer ${token}`,
+            },
+            body: JSON.stringify(dataset),
+          }
+        );
+
+      let buildingData: any;
+
+      try {
+        buildingData =
+          await buildingResponse.json();
+      } catch {
+        throw new Error(
+          "Building API returned an invalid response."
+        );
+      }
+
+      if (
+        !buildingResponse.ok ||
+        buildingData?.success === false
+      ) {
+        throw new Error(
+          buildingData?.detail ||
+            buildingData?.message ||
+            "The AI-generated building failed backend validation."
+        );
+      }
+
+      /*
+       * STEP 3
+       *
+       * Convert the same AI graph into the frontend's existing
+       * FloorGeometry/BuildingDefinition format.
+       */
+
+      const generatedBuilding =
+        buildBuildingGeometry({
+          nodes: allNodes,
+          edges: allEdges,
+        });
+
+      const occupantsByFloor:
+        Record<number, Occupant[]> = {};
+
+      const requestedOccupancy =
+        Math.max(
+          1,
+          Number(normalOccupancy) || 1
+        );
+
+      const roomBuckets = generatedBuilding.floors
+        .flatMap((floor) =>
+          floor.rooms
+            .filter(
+              (room) =>
+                room.type !== "corridor"
+            )
+            .map((room) => ({
+              floor: floor.floorLevel,
+              room,
+            }))
+        );
+
+      const roomCount = roomBuckets.length;
+      const baseCount =
+        roomCount > 0
+          ? Math.floor(
+              requestedOccupancy /
+                roomCount
+            )
+          : 0;
+      const remainder =
+        roomCount > 0
+          ? requestedOccupancy %
+            roomCount
+          : 0;
+
+      for (
+        const floor of
+          generatedBuilding.floors
+      ) {
+        occupantsByFloor[
+          floor.floorLevel
+        ] = [];
+      }
+
+      roomBuckets.forEach(
+        ({ floor, room }, index) => {
+          const countForRoom =
+            baseCount +
+            (index < remainder ? 1 : 0);
+
+          const center =
+            room.polygon.reduce(
+              (acc, point) => ({
+                x:
+                  acc.x + point.x,
+                y:
+                  acc.y + point.y,
+              }),
+              { x: 0, y: 0 }
+            );
+
+          const pointCount =
+            room.polygon.length || 1;
+
+          for (
+            let occupantIndex = 0;
+            occupantIndex <
+            countForRoom;
+            occupantIndex++
+          ) {
+            occupantsByFloor[
+              floor
+            ].push({
+              id:
+                `AI_OCCUPANT_${floor}_${index + 1}_${occupantIndex + 1}`,
+              roomId: room.id,
+              position: {
+                x:
+                  center.x /
+                  pointCount,
+                y:
+                  center.y /
+                  pointCount,
+              },
+              profile: "normal",
+              floorLevel: floor,
+            });
+          }
+        }
+      );
+
+      const customBuilding:
+        BuildingDefinition = {
+        id: 4,
+        name:
+          buildingName.trim() ||
+          "AI Generated Building",
+        floors:
+          generatedBuilding.floors,
+        occupantsByFloor,
+        isCustom: true,
+      };
+
+      localStorage.setItem(
+        "s33-custom-building",
+        JSON.stringify(
+          customBuilding
+        )
+      );
+
+      localStorage.setItem(
+        "s33-custom-building-meta",
+        JSON.stringify({
+          backendBuildingId:
+            buildingData?.building_id ||
+            null,
+          name:
+            customBuilding.name,
+          address,
+          buildingType,
+          normalOccupancy:
+            requestedOccupancy,
+          accessibility: {
+            wheelchairAccessible,
+            accessibleExits,
+            elevatorAvailable,
+          },
+          assemblyArea,
+        })
+      );
+
       setSuccess(
-        "Building registered successfully."
+        "Building registered and floor plans analyzed successfully."
       );
 
       setTimeout(() => {
         router.push(
-          `/buildings/${buildingId}`
+          "/dashboard"
         );
       }, 700);
     } catch (err) {
@@ -920,7 +1191,7 @@ function FloorUploadCard({
           <div className="mt-1 text-[10px] text-slate-400">
             {file
               ? file.name
-              : "Upload floor plan image or PDF"}
+              : "Upload floor plan image"}
           </div>
 
         </div>
@@ -935,7 +1206,7 @@ function FloorUploadCard({
 
       <input
         type="file"
-        accept="image/*,.pdf"
+        accept="image/png,image/jpeg,image/webp"
         className="hidden"
         onChange={(event) =>
           onChange(floor, event)

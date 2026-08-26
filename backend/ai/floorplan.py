@@ -6,7 +6,9 @@ from typing import Any
 
 import requests
 
+from dotenv import load_dotenv
 
+load_dotenv()
 OPENROUTER_URL = (
     "https://openrouter.ai/api/v1/chat/completions"
 )
@@ -212,18 +214,26 @@ def _normalise_graph(
     result: dict[str, Any],
 ) -> dict[str, Any]:
 
-    nodes = result.get(
-        "nodes",
-        [],
-    )
-
-    edges = result.get(
-        "edges",
-        [],
-    )
+    nodes = result.get("nodes", [])
+    edges = result.get("edges", [])
 
     clean_nodes = []
     node_ids = set()
+
+    # ---------------------------------------------------------
+    # NORMALISE NODE TYPES
+    # ---------------------------------------------------------
+
+    NODE_TYPE_MAP = {
+        "stair": "stairs",
+        "stairs": "stairs",
+        "lift": "elevator",
+        "elevator": "elevator",
+        "room": "room",
+        "corridor": "corridor",
+        "exit": "exit",
+        "ramp": "ramp",
+    }
 
     for index, node in enumerate(nodes):
 
@@ -238,44 +248,43 @@ def _normalise_graph(
         )
 
         if node_id in node_ids:
-            node_id = (
-                f"{node_id}_{index + 1}"
-            )
+            node_id = f"{node_id}_{index + 1}"
 
         node_ids.add(node_id)
 
         try:
-            x = float(
-                node.get("x", 0)
-            )
+            x = float(node.get("x", 0))
         except (TypeError, ValueError):
             x = 0
 
         try:
-            y = float(
-                node.get("y", 0)
-            )
+            y = float(node.get("y", 0))
         except (TypeError, ValueError):
             y = 0
 
         try:
-            floor = int(
-                node.get("floor", 1)
-            )
+            floor = int(node.get("floor", 1))
         except (TypeError, ValueError):
             floor = 1
+
+        raw_type = str(
+            node.get(
+                "type",
+                "room",
+            )
+        ).lower().strip()
+
+        node_type = NODE_TYPE_MAP.get(
+            raw_type,
+            "room",
+        )
 
         clean_nodes.append(
             {
                 "id": node_id,
                 "x": x,
                 "y": y,
-                "type": str(
-                    node.get(
-                        "type",
-                        "junction",
-                    )
-                ),
+                "type": node_type,
                 "floor": floor,
                 "label": str(
                     node.get(
@@ -286,6 +295,9 @@ def _normalise_graph(
             }
         )
 
+    # ---------------------------------------------------------
+    # NORMALISE EDGE TYPES
+    # ---------------------------------------------------------
     clean_edges = []
 
     for edge in edges:
@@ -326,6 +338,99 @@ def _normalise_graph(
         except (TypeError, ValueError):
             weight = 1
 
+        raw_edge_type = str(
+            edge.get(
+                "type",
+                "corridor",
+            )
+        ).lower().strip()
+
+        # Find the connected nodes
+        source_node = next(
+            (
+                node
+                for node in clean_nodes
+                if node["id"] == source
+            ),
+            None,
+        )
+
+        target_node = next(
+            (
+                node
+                for node in clean_nodes
+                if node["id"] == target
+            ),
+            None,
+        )
+
+        connected_types = {
+            source_node["type"]
+            if source_node
+            else "",
+            target_node["type"]
+            if target_node
+            else "",
+        }
+
+        # Normalize AI-generated edge types
+        if raw_edge_type == "door":
+            edge_type = "corridor"
+
+        elif raw_edge_type == "connection":
+
+            if "elevator" in connected_types:
+                edge_type = "elevator"
+
+            elif "stairs" in connected_types:
+                edge_type = "stairs"
+
+            elif "ramp" in connected_types:
+                edge_type = "ramp"
+
+            else:
+                edge_type = "corridor"
+
+        elif raw_edge_type == "exit":
+            edge_type = "corridor"
+
+        elif raw_edge_type in {
+            "corridor",
+            "stairs",
+            "elevator",
+            "ramp",
+        }:
+            edge_type = raw_edge_type
+
+        else:
+            edge_type = "corridor"
+
+        # If the AI returned a generic corridor connection,
+        # infer special connections from the connected nodes.
+        if edge_type == "corridor":
+
+            if "elevator" in connected_types:
+                edge_type = "elevator"
+
+            elif "stairs" in connected_types:
+                edge_type = "stairs"
+
+            elif "ramp" in connected_types:
+                edge_type = "ramp"
+
+        # Stairs are not wheelchair accessible by default.
+        # Elevators and ramps remain accessible unless explicitly
+        # marked otherwise by the AI.
+        accessible = bool(
+            edge.get(
+                "accessible",
+                True,
+            )
+        )
+
+        if edge_type == "stairs":
+            accessible = False
+
         clean_edges.append(
             {
                 "from": source,
@@ -334,20 +439,14 @@ def _normalise_graph(
                     weight,
                     0.01,
                 ),
-                "type": str(
-                    edge.get(
-                        "type",
-                        "corridor",
-                    )
-                ),
-                "accessible": bool(
-                    edge.get(
-                        "accessible",
-                        True,
-                    )
-                ),
+                "type": edge_type,
+                "accessible": accessible,
             }
         )
+
+    # ---------------------------------------------------------
+    # BUILDING / ANALYSIS
+    # ---------------------------------------------------------
 
     building = result.get(
         "building",
@@ -412,7 +511,7 @@ def _normalise_graph(
                 analysis.get(
                     "stairs_detected",
                     sum(
-                        node["type"] == "stair"
+                        node["type"] == "stairs"
                         for node in clean_nodes
                     ),
                 )
@@ -457,7 +556,6 @@ def _normalise_graph(
             ),
         },
     }
-
 
 def analyze_floorplan(
     content: bytes,
@@ -511,7 +609,7 @@ def analyze_floorplan(
             },
         ],
         "temperature": 0,
-        "max_tokens": 12000,
+        "max_tokens": 7000,
     }
 
     response = requests.post(
@@ -569,5 +667,8 @@ def analyze_floorplan(
         )
 
     result = _extract_json(text)
+    print("========== RAW AI GRAPH ==========")
+    print(json.dumps(result, indent=2))
+    print("==================================")
 
     return _normalise_graph(result)

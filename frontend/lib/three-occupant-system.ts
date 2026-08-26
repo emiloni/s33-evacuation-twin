@@ -433,7 +433,9 @@ export class OccupantVisual3D {
 
     const points3D = path.map((p) => {
       const v = toWorldCoords(p, config);
-      return new THREE.Vector3(v.x, 0, v.z);
+      const level = (p as any).level || 1;
+      const yLevel = (level - 1) * 3.5;
+      return new THREE.Vector3(v.x, yLevel, v.z);
     });
 
     this.evacuationCurve = new THREE.CatmullRomCurve3(points3D, false, "centripetal", 0.2);
@@ -497,8 +499,49 @@ export class OccupantVisual3D {
   }
 
   public update(delta: number, elapsed: number) {
-    // Preserve initial position (occupants stay standing in rooms while egress route paths are displayed)
+    // ── EVACUATION LOCOMOTION ──
+    if (this.isEvacuating && this.evacuationCurve) {
+      this.evacuationProgress += delta * this.evacuationSpeed;
+
+      const totalLength = this.evacuationCurve.getLength();
+      const normalizedProgress = Math.min(this.evacuationProgress / totalLength, 1.0);
+
+      if (normalizedProgress >= 1.0) {
+        // Reached exit — hide the occupant
+        this.group.visible = false;
+        return;
+      }
+
+      const point = this.evacuationCurve.getPointAt(normalizedProgress);
+      const tangent = this.evacuationCurve.getTangentAt(normalizedProgress);
+
+      // Apply lane offset perpendicular to movement direction
+      const lateral = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+      const offset = lateral.multiplyScalar(this.laneOffset);
+
+      this.group.position.set(point.x + offset.x, point.y, point.z + offset.z);
+
+      // Face movement direction
+      this.group.rotation.y = Math.atan2(tangent.x, tangent.z);
+
+      // ── RUNNING ANIMATION ──
+      const runCycle = Math.sin(elapsed * 12 + this.timeOffset) * 0.5;
+      if (this.leftLeg && this.rightLeg) {
+        this.leftLeg.rotation.x = runCycle * 0.7;
+        this.rightLeg.rotation.x = -runCycle * 0.7;
+      }
+      if (this.leftArm && this.rightArm) {
+        this.leftArm.rotation.x = -runCycle * 0.5;
+        this.rightArm.rotation.x = runCycle * 0.5;
+      }
+      this.avatarMesh.position.y = Math.abs(runCycle) * 0.04;
+
+      return;
+    }
+
+    // ── IDLE STATE ──
     this.group.position.copy(this.initialPosition);
+    this.group.visible = true;
 
     // Gentle realistic idle stance
     const breath = Math.sin((elapsed + this.timeOffset) * 2.5) * 0.02;

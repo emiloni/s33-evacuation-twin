@@ -11,3 +11,13 @@ venv/
 
 *.db
 *.sqlite3
+.env
+
+# Local database
+s33_users.db
+
+# Temporary Freebuff files
+.freebuff/
+
+# Backup source files
+*.before-backend-integration.tsx

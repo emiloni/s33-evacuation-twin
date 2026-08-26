@@ -505,7 +505,54 @@ function createElevators(
  * FLOOR GEOMETRY
  * ------------------------------------------------------------
  */
+function createConnections(
+  nodes: ApiBuildingNode[],
+  edges: ApiBuildingEdge[],
+): FloorGeometry["connections"] {
+  const nodeMap = new Map<string, ApiBuildingNode>();
 
+  for (const node of nodes) {
+    nodeMap.set(node.id, node);
+  }
+
+  return edges
+    .map((edge, index) => {
+      const from = nodeMap.get(edge.from);
+      const to = nodeMap.get(edge.to);
+
+      if (!from || !to) {
+        return null;
+      }
+
+      let type:
+        | "corridor"
+        | "stairs"
+        | "elevator";
+
+      if (
+        edge.type === "stairs" ||
+        edge.type === "elevator"
+      ) {
+        type = edge.type;
+      } else {
+        type = "corridor";
+      }
+
+      return {
+        id: `CONNECTION_${index}_${edge.from}_${edge.to}`,
+        from: edge.from,
+        to: edge.to,
+        type,
+        accessible: edge.accessible,
+      };
+    })
+    .filter(
+      (
+        connection,
+      ): connection is FloorGeometry["connections"][number] =>
+        connection !== null,
+    );
+}
 export function buildFloorGeometry(
   apiBuilding: ApiBuilding,
   floorLevel: number
@@ -587,7 +634,10 @@ export function buildFloorGeometry(
       createBuildingOutline(positions, floorNodes),
 
     hazards: [],
-    connections: [],
+    connections: createConnections(
+  floorNodes,
+  floorEdges,
+),
   };
 }
 

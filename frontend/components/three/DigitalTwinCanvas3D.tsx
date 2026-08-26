@@ -12,6 +12,7 @@ interface DigitalTwinCanvas3DProps {
   routes?: RouteSegment[];
   allFloors?: FloorGeometry[];
   selectedRoomId?: string | null;
+  simulationRunning?: boolean;
   onSelectRoom?: (room: Room | null) => void;
   onSelectOccupant?: (occupant: Occupant | null) => void;
   className?: string;
@@ -24,6 +25,7 @@ export default function DigitalTwinCanvas3D({
   routes = [],
   allFloors,
   selectedRoomId = null,
+  simulationRunning = false,
   onSelectRoom,
   onSelectOccupant,
   className = "",
@@ -87,6 +89,11 @@ export default function DigitalTwinCanvas3D({
   useEffect(() => {
     sceneEngineRef.current?.updateRoutes(routes);
   }, [routes]);
+
+  // Synchronize Simulation State
+  useEffect(() => {
+    sceneEngineRef.current?.setSimulationRunning(simulationRunning);
+  }, [simulationRunning]);
 
   const handlePresetChange = useCallback((preset: CameraPreset) => {
     setActivePreset(preset);

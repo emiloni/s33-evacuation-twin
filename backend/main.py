@@ -21,14 +21,14 @@ from fastapi import (
     Depends,
     HTTPException,
 )
-from backend.ai.floorplan import analyze_floorplan
+
 import json
 from fastapi.middleware.cors import CORSMiddleware
 
 from sqlalchemy.orm import Session
 
 from pydantic import BaseModel, Field
-
+from .ai.floorplan import analyze_floorplan
 
 # =========================================================
 # AUTHENTICATION
@@ -62,6 +62,11 @@ from routing.dijkstra import (
 
 from routing.graph import (
     build_graph,
+    load_json,
+)
+
+from routing.building_store import (
+    get_active_building,
 )
 
 from routing.safety import (
@@ -481,67 +486,20 @@ def get_building(
         get_current_user
     ),
 ):
+    """Return the currently active building (nodes + edges)."""
+    active = get_active_building()
 
-    graph = build_graph()
+    if active is not None:
+        return {
+            "nodes": active.get("nodes", []),
+            "edges": active.get("edges", []),
+        }
 
-    nodes = []
-
-    for node_id, data in graph.nodes(
-        data=True
-    ):
-        nodes.append(
-            {
-                "id": node_id,
-                "x": data.get(
-                    "x",
-                    0,
-                ),
-                "y": data.get(
-                    "y",
-                    0,
-                ),
-                "type": data.get(
-                    "type",
-                    "node",
-                ),
-                "floor": data.get(
-                    "floor",
-                    1,
-                ),
-                "label": data.get(
-                    "label",
-                    node_id,
-                ),
-            }
-        )
-
-    edges = []
-
-    for u, v, data in graph.edges(
-        data=True
-    ):
-        edges.append(
-            {
-                "from": u,
-                "to": v,
-                "weight": data.get(
-                    "weight",
-                    1,
-                ),
-                "type": data.get(
-                    "type",
-                    "corridor",
-                ),
-                "accessible": data.get(
-                    "accessible",
-                    True,
-                ),
-            }
-        )
-
+    # Fallback: load demo building
+    demo = load_json("demo_building.json")
     return {
-        "nodes": nodes,
-        "edges": edges,
+        "nodes": demo.get("nodes", []),
+        "edges": demo.get("edges", []),
     }
 
 
@@ -924,3 +882,90 @@ async def evacuation_websocket(
             destination,
             mobility,
         )
+@app.post("/api/v1/building/ai-parse")
+async def ai_parse_floorplan(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        if not file.filename:
+            return {
+                "success": False,
+                "message": "File name is required.",
+            }
+
+        allowed_extensions = {
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".webp",
+        }
+
+        extension = (
+            "." + file.filename.lower().rsplit(".", 1)[-1]
+            if "." in file.filename
+            else ""
+        )
+
+        if extension not in allowed_extensions:
+            return {
+                "success": False,
+                "message": (
+                    "Only PNG, JPG, JPEG and WEBP "
+                    "floor plans are supported."
+                ),
+            }
+
+        content = await file.read()
+
+        result = analyze_floorplan(
+            content,
+            file.filename,
+        )
+
+        dataset = BuildingDataset(
+            building=result["building"],
+            nodes=result["nodes"],
+            edges=result["edges"],
+        )
+
+        validation = activate_building(
+            dataset
+        )
+
+        building_data = dataset.model_dump(
+            mode="json"
+        )
+
+        saved_building = SavedBuilding(
+            user_id=current_user.id,
+            name=f"AI - {file.filename}",
+            building_json=json.dumps(
+                building_data
+            ),
+        )
+
+        db.add(saved_building)
+        db.commit()
+        db.refresh(saved_building)
+
+        return {
+            "success": True,
+            "message": "Floor plan analyzed successfully.",
+            "building": building_data,
+            "analysis": result.get(
+                "analysis",
+                {}
+            ),
+            "validation": validation,
+            "saved_building_id": saved_building.id,
+        }
+
+    except Exception as error:
+        db.rollback()
+
+        return {
+            "success": False,
+            "message": str(error),
+        }

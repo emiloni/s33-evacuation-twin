@@ -83,12 +83,23 @@ def build_graph() -> nx.Graph:
     active = get_active_building()
 
     if active is not None:
+        print(
+            "ACTIVE BUILDING GRAPH:",
+            active.get("building"),
+            "NODES:",
+            len(active.get("nodes", [])),
+            "EDGES:",
+            len(active.get("edges", [])),
+        )
+
         return build_graph_from_data(
             active
         )
 
-    # Default to the multi-floor
-    # demonstration building.
+    print(
+        "NO ACTIVE BUILDING -> USING DEMO GRAPH"
+    )
+
     demo_building = load_json(
         "demo_building.json"
     )

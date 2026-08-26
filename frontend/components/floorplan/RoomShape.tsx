@@ -25,14 +25,14 @@ export default function RoomShape({
   const centroid = polygonCentroid(room.polygon);
 
   const fill = isCorridor
-    ? COLORS.safeZone
-    : COLORS.room;
+    ? "#064E3B"
+    : "#111827";
 
   const stroke = isCorridor
-    ? COLORS.safeZoneLine
+    ? "#10B981"
     : isDraft
-    ? COLORS.amber
-    : COLORS.wall;
+    ? "#F59E0B"
+    : "#334155";
 
   return (
     <g
@@ -51,7 +51,7 @@ export default function RoomShape({
           fill="none"
           stroke={COLORS.accentTeal}
           strokeWidth={10}
-          strokeOpacity={0.16}
+          strokeOpacity={0.3}
           vectorEffect="non-scaling-stroke"
         />
       )}
@@ -59,7 +59,7 @@ export default function RoomShape({
       <polygon
         points={polygonToSvgPoints(room.polygon)}
         fill={fill}
-        fillOpacity={isCorridor ? 0.72 : 1}
+        fillOpacity={isCorridor ? 0.75 : 0.95}
         stroke={stroke}
         strokeWidth={WALL_STROKE_WIDTH}
         strokeDasharray={isDraft ? "8 6" : undefined}
@@ -71,9 +71,9 @@ export default function RoomShape({
         <polyline
           points={polygonToSvgPoints(room.polygon)}
           fill="none"
-          stroke={COLORS.safeZoneLine}
+          stroke="#10B981"
           strokeWidth={1.5}
-          strokeOpacity={0.35}
+          strokeOpacity={0.4}
           vectorEffect="non-scaling-stroke"
           pointerEvents="none"
         />
@@ -84,28 +84,30 @@ export default function RoomShape({
           <rect
             x={
               centroid.x -
-              Math.max(35, room.label.length * 4)
+              Math.max(38, room.label.length * 4.5)
             }
             y={centroid.y - 14}
             width={Math.max(
-              70,
-              room.label.length * 8
+              76,
+              room.label.length * 9
             )}
             height={28}
-            rx={5}
-            fill="#FFFFFF"
-            fillOpacity={0.78}
+            rx={6}
+            fill="#1E293B"
+            fillOpacity={0.92}
+            stroke="#334155"
+            strokeWidth={1}
           />
 
           <text
             x={centroid.x}
             y={centroid.y + 4}
             textAnchor="middle"
-            fontSize={10.5}
-            fill={COLORS.ink}
-            fontFamily="Inter, sans-serif"
+            fontSize={10}
+            fill="#F8FAFC"
+            fontFamily="ui-monospace, monospace"
             fontWeight={700}
-            letterSpacing="0.5px"
+            letterSpacing="0.8px"
           >
             {room.label.toUpperCase()}
           </text>
@@ -118,15 +120,15 @@ export default function RoomShape({
             cx={centroid.x}
             cy={centroid.y + 24}
             r={4}
-            fill={COLORS.amber}
+            fill="#F59E0B"
           />
 
           <text
             x={centroid.x + 9}
             y={centroid.y + 28}
             fontSize={8}
-            fill={COLORS.amber}
-            fontFamily="Inter, sans-serif"
+            fill="#F59E0B"
+            fontFamily="ui-monospace, monospace"
             fontWeight={700}
           >
             REVIEW

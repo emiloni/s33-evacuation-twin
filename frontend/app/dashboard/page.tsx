@@ -14,6 +14,13 @@ import {
   type BuildingDefinition,
 } from "@/lib/buildings-registry";
 import { calculateAllEvacuationRoutes } from "@/lib/evacuation-engine";
+import {
+  adaptBuilding,
+  adaptApiResponse,
+  type ApiBuilding,
+  type ApiBuildingResponse,
+  type AdaptedBuilding,
+} from "@/lib/building-3d-adapter";
 
 import type {
   FloorGeometry,
@@ -21,8 +28,8 @@ import type {
   Occupant,
   Point,
   RouteSegment,
+  MobilityProfile,
 } from "@/lib/schema";
-
 const BACKEND_HTTP =
   process.env.NEXT_PUBLIC_BACKEND_HTTP ||
   "http://127.0.0.1:8000";
@@ -108,7 +115,10 @@ export default function DashboardPage() {
     useState("");
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-
+const [backendBuilding, setBackendBuilding] =
+  useState<ApiBuilding | null>(null);
+const [adaptedBuilding, setAdaptedBuilding] =
+  useState<AdaptedBuilding | null>(null);
   // Load a building detected/analyzed from an uploaded architectural plan
   // (written to localStorage by the landing-page upload flow), if present.
   // Existing Building 1/2/3 demo scenarios are always available regardless.
@@ -189,6 +199,138 @@ export default function DashboardPage() {
       ).floors,
     [customBuilding]
   );
+const loadBackendBuilding = useCallback(
+  async () => {
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("s33_access_token") ||
+          localStorage.getItem("s33-token")
+        : null;
+
+    console.log(
+      "BUILDING TOKEN EXISTS:",
+      Boolean(token)
+    );
+
+    if (!token) {
+      console.error(
+        "NO S33 ACCESS TOKEN FOUND"
+      );
+
+      setMessage(
+        "No login token found. Please log in again."
+      );
+
+      return null;
+    }
+
+    try {
+      const url =
+        `${BACKEND_HTTP}/api/v1/building`;
+
+      console.log(
+        "GET BUILDING URL:",
+        url
+      );
+
+      const response =
+        await fetch(
+          url,
+          {
+            cache: "no-store",
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+            },
+          }
+        );
+
+      console.log(
+        "GET BUILDING STATUS:",
+        response.status
+      );
+
+      const rawText =
+        await response.text();
+
+      console.log(
+        "GET BUILDING RAW RESPONSE:",
+        rawText
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Building API failed (${response.status}): ${rawText}`
+        );
+      }
+
+      let data: ApiBuilding;
+
+      try {
+        data =
+          JSON.parse(
+            rawText
+          ) as ApiBuilding;
+      } catch {
+        throw new Error(
+          "Building API returned invalid JSON."
+        );
+      }
+
+      console.log(
+        "BACKEND BUILDING RECEIVED:",
+        data
+      );
+
+      console.log(
+        "BACKEND NODE COUNT:",
+        data?.nodes?.length
+      );
+
+      console.log(
+        "BACKEND EDGE COUNT:",
+        data?.edges?.length
+      );
+
+      if (
+        !Array.isArray(
+          data?.nodes
+        ) ||
+        !Array.isArray(
+          data?.edges
+        )
+      ) {
+        throw new Error(
+          "Building API response does not contain nodes and edges."
+        );
+      }
+
+      setBackendBuilding(
+        data
+      );
+
+      // Adapt building data for 3D rendering
+      const adapted = adaptBuilding(data);
+      setAdaptedBuilding(adapted);
+
+      return data;
+    } catch (error) {
+      console.error(
+        "LOAD BUILDING ERROR:",
+        error
+      );
+
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to load AI building."
+      );
+
+      return null;
+    }
+  },
+  [router]
+);
 
   // Helper to calculate evacuation routes for the currently selected floor
   // CRITICAL RULE: HAZARD FLOOR = SOURCE FLOOR (NOT SELECTED FLOOR)
@@ -265,6 +407,7 @@ export default function DashboardPage() {
     [customBuilding]
   );
 
+  
   const [floor, setFloor] =
     useState<FloorGeometry>(() =>
       getFloorGeometry(1, 1, [])
@@ -287,22 +430,205 @@ export default function DashboardPage() {
         clearTimeout(timerRef.current);
       }
     };
-  }, []);
+  }, []);const buildBackendFloorsFromGraph =
+    useCallback(
+      (
+        data: ApiBuilding
+      ): FloorGeometry[] => {
+        // Use the adapter to convert backend data to FloorGeometry
+        const adapted = adaptBuilding(data);
+        setAdaptedBuilding(adapted);
+        return adapted.floors;
+      },
+      []
+    );
+    const generateBackendRoute = useCallback(
+  async (
+    startNodeId: string,
+    mobility: MobilityProfile = "normal",
+    destination: string | null = null,
+    sensors: unknown[] = []
+  ): Promise<RouteSegment[]> => {
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("s33_access_token") ||
+          localStorage.getItem("s33-token")
+        : null;
 
-  // Handle Building Scenario Selection
-  const handleSelectBuilding = useCallback(
-    (bldg: number) => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
+    if (!token) {
+      router.replace("/login");
+      return [];
+    }
+
+    try {
+      const response = await fetch(
+        `${BACKEND_HTTP}/api/v1/evacuation/route`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+            Authorization:
+              `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            start: startNodeId,
+            destination,
+            mobility,
+            sensors,
+          }),
+        }
+      );
+
+      const result =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result?.detail ||
+            result?.message ||
+            "Backend route calculation failed."
+        );
       }
 
-      setSelectedBuilding(bldg);
-      setSelectedFloor(1);
-      setHazards([]);
-      setSimulationRunning(false);
-      setMessage("");
+      const routeIds: string[] =
+        Array.isArray(result?.route)
+          ? result.route
+          : [];
 
+      if (routeIds.length < 2) {
+        setMessage(
+          result?.message ||
+            "No evacuation route could be calculated."
+        );
+        return [];
+      }
+
+      if (!backendBuilding) {
+        return [];
+      }
+
+      const nodeMap = new Map(
+        backendBuilding.nodes.map(
+          (node) => [
+            node.id,
+            node,
+          ]
+        )
+      );
+
+      const path = routeIds
+        .map((nodeId) => {
+          const node =
+            nodeMap.get(nodeId);
+
+          if (!node) {
+            return null;
+          }
+
+          // Use adapted positions if available, otherwise fallback to simple transform
+          const adaptedPos =
+            adaptedBuilding?.positions?.get(nodeId);
+
+          return {
+            x: adaptedPos?.x ?? (150 + (Number(node.x) || 0) * 1.45),
+            y: adaptedPos?.y ?? (80 + (Number(node.y) || 0) * 1.15),
+            level: Number(node.floor) || 1,
+          };
+        })
+        .filter(
+          (
+            point
+          ): point is {
+            x: number;
+            y: number;
+            level: number;
+          } => point !== null
+        );
+
+      if (path.length < 2) {
+        setMessage(
+          "Backend returned an invalid evacuation route."
+        );
+        return [];
+      }
+
+      return [
+        {
+          occupantId: startNodeId,
+          path,
+          eta: Math.max(
+            1,
+            Number(result?.distance) ||
+              path.length - 1
+          ),
+          exitId:
+            result?.destination ||
+            routeIds[
+              routeIds.length - 1
+            ],
+          confidence:
+            result?.confidence ||
+            "medium",
+          basis:
+            result?.mode ===
+            "conservative"
+              ? "static_fallback"
+              : "live_sensors",
+          isRerouted: false,
+        },
+      ];
+    } catch (error) {
+      console.error(
+        "Backend route error:",
+        error
+      );
+
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to calculate evacuation route."
+      );
+
+      return [];
+    }
+  },
+  [backendBuilding, adaptedBuilding, router]
+);
+const createBackendOccupants =
+  useCallback(
+    (
+      data: ApiBuilding,
+      _geometry: FloorGeometry[]
+    ): Occupant[] => {
+      // Use the adapter to create occupants
+      // If we have adapted data, use it; otherwise adapt on the fly
+      if (adaptedBuilding) {
+        return adaptedBuilding.occupants;
+      }
+      const adapted = adaptBuilding(data);
+      setAdaptedBuilding(adapted);
+      return adapted.occupants;
+    },
+    [adaptedBuilding]
+  );
+  // Handle Building Scenario Selection
+// Handle Building Scenario Selection
+const handleSelectBuilding = useCallback(
+  async (bldg: number) => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    setSelectedBuilding(bldg);
+    setSelectedFloor(1);
+    setHazards([]);
+    setSimulationRunning(false);
+    setMessage("");
+
+    // Existing demo buildings keep their current frontend logic.
+    if (bldg !== CUSTOM_BUILDING_ID) {
       const newFloor = getFloorGeometry(
         bldg,
         1,
@@ -314,6 +640,7 @@ export default function DashboardPage() {
 
       setFloor(newFloor);
       setOccupants(newOccupants);
+
       setRoutes(
         getRoutesForSelectedFloor(
           bldg,
@@ -321,13 +648,107 @@ export default function DashboardPage() {
           []
         )
       );
-    },
-    [
-      getFloorGeometry,
-      getAllOccupants,
-      getRoutesForSelectedFloor,
-    ]
-  );
+
+      return;
+    }
+
+    // Uploaded / AI building uses the backend graph.
+    try {
+      const data =
+        backendBuilding ||
+        (await loadBackendBuilding());
+
+      if (!data) {
+        setMessage(
+          "Unable to load the uploaded building."
+        );
+        return;
+      }
+
+      const geometry =
+        buildBackendFloorsFromGraph(data);
+
+      const firstFloor =
+        geometry.find(
+          (f) => f.floorLevel === 1
+        ) || geometry[0];
+
+      if (!firstFloor) {
+        setMessage(
+          "The uploaded building has no valid floor data."
+        );
+        return;
+      }
+
+      setFloor(firstFloor);
+
+      const backendOccupants =
+        createBackendOccupants(
+          data,
+          geometry
+        );
+
+      setOccupants(
+        backendOccupants
+      );
+      console.log(
+  "AI OCCUPANTS:",
+  backendOccupants.length,
+  backendOccupants
+);
+
+      // Generate normal routes for ALL occupants
+      const normalRoutes =
+        await Promise.all(
+          backendOccupants.map(
+            (occupant) =>
+              generateBackendRoute(
+                occupant.roomId,
+                occupant.profile,
+                null,
+                []
+              )
+          )
+        );
+
+      // Remap occupantId from roomId to actual occupant.id
+      const remappedRoutes = normalRoutes.flat().map((route) => {
+        const matchedOccupant = backendOccupants.find(o => o.roomId === route.occupantId);
+        return {
+          ...route,
+          occupantId: matchedOccupant?.id || route.occupantId,
+        };
+      });
+
+      setRoutes(remappedRoutes);
+
+      return;
+    } catch (error) {
+      console.error(
+        "Custom building selection error:",
+        error
+      );
+
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to load uploaded building."
+      );
+
+      return;
+    }
+  },
+  [
+    backendBuilding,
+    loadBackendBuilding,
+    buildBackendFloorsFromGraph,
+    createBackendOccupants,
+    getFloorGeometry,
+    getAllOccupants,
+    getRoutesForSelectedFloor,
+    generateBackendRoute,
+  ]
+);
 
   // Handle Floor Level Switch
   const handleSelectFloor = useCallback(
@@ -359,23 +780,35 @@ export default function DashboardPage() {
   );
 
   // Toggle Evacuation Simulation
-  const handleSimulation = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
+  // Toggle Evacuation Simulation
+const handleSimulation = useCallback(() => {
+  if (timerRef.current) {
+    clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }
 
-    if (!simulationRunning) {
-      // 1. START SIMULATION
-      setSimulationRunning(true);
-      setHazards([]);
-      setMessage("");
+  // =========================================================
+  // START SIMULATION
+  // =========================================================
+  if (!simulationRunning) {
+    setSimulationRunning(true);
+    setHazards([]);
+    setMessage("");
 
-      const cleanFloor = getFloorGeometry(
-        selectedBuilding,
-        selectedFloor,
-        []
-      );
+    // -------------------------------------------------------
+    // BUILDINGS 1 / 2 / 3
+    // Keep the existing frontend simulation unchanged.
+    // -------------------------------------------------------
+    if (
+      selectedBuilding !==
+      CUSTOM_BUILDING_ID
+    ) {
+      const cleanFloor =
+        getFloorGeometry(
+          selectedBuilding,
+          selectedFloor,
+          []
+        );
 
       setFloor(cleanFloor);
 
@@ -388,128 +821,500 @@ export default function DashboardPage() {
 
       setRoutes(normalRoutes);
 
-      // 2. ACTIVATE dynamic fire hazard after ~2 seconds
-      timerRef.current = setTimeout(() => {
-        let fireFloorLevel = 1;
-        let randomPos = {
-          x: 680,
-          y: 330,
-        };
-
-        if (selectedBuilding === 3) {
-          fireFloorLevel =
-            Math.floor(Math.random() * 2) + 1;
-
-          randomPos =
-            fireFloorLevel === 2
-              ? { x: 380, y: 330 }
-              : { x: 680, y: 330 };
-        } else if (selectedBuilding === 2) {
-          fireFloorLevel =
-            Math.floor(Math.random() * 3) + 1;
-
-          randomPos =
-            fireFloorLevel === 3
-              ? { x: 380, y: 330 }
-              : { x: 680, y: 330 };
-        } else if (
-          selectedBuilding === CUSTOM_BUILDING_ID &&
-          customBuilding
-        ) {
-          const floorLevels =
-            customBuilding.floors.map(
-              (f) => f.floorLevel
-            );
-
-          fireFloorLevel =
-            floorLevels[
-              Math.floor(
-                Math.random() * floorLevels.length
-              )
-            ];
-
-          const targetFloor =
-            customBuilding.floors.find(
-              (f) =>
-                f.floorLevel === fireFloorLevel
-            );
-
-          randomPos = targetFloor
-            ? getGenericFirePosition(
-                targetFloor
-              )
-            : randomPos;
-        } else {
-          randomPos = {
+      timerRef.current =
+        setTimeout(() => {
+          let fireFloorLevel = 1;
+          let randomPos = {
             x: 680,
             y: 330,
           };
+
+          if (selectedBuilding === 3) {
+            fireFloorLevel =
+              Math.floor(
+                Math.random() * 2
+              ) + 1;
+
+            randomPos =
+              fireFloorLevel === 2
+                ? {
+                    x: 380,
+                    y: 330,
+                  }
+                : {
+                    x: 680,
+                    y: 330,
+                  };
+          } else if (
+            selectedBuilding === 2
+          ) {
+            fireFloorLevel =
+              Math.floor(
+                Math.random() * 3
+              ) + 1;
+
+            randomPos =
+              fireFloorLevel === 3
+                ? {
+                    x: 380,
+                    y: 330,
+                  }
+                : {
+                    x: 680,
+                    y: 330,
+                  };
+          } else {
+            randomPos = {
+              x: 680,
+              y: 330,
+            };
+          }
+
+          const autoFire: Hazard = {
+            id:
+              "hazard-fire-auto",
+            type: "fire",
+            position: randomPos,
+            severity: "high",
+          };
+
+          (
+            autoFire as any
+          ).floorLevel =
+            fireFloorLevel;
+
+          const activeHazards = [
+            autoFire,
+          ];
+
+          setHazards(
+            activeHazards
+          );
+
+          setSelectedFloor(
+            fireFloorLevel
+          );
+
+          const updatedFloor =
+            getFloorGeometry(
+              selectedBuilding,
+              fireFloorLevel,
+              activeHazards
+            );
+
+          setFloor(
+            updatedFloor
+          );
+
+          const reroutedPaths =
+            getRoutesForSelectedFloor(
+              selectedBuilding,
+              fireFloorLevel,
+              activeHazards
+            );
+
+          setRoutes(
+            reroutedPaths
+          );
+        }, 2000);
+
+      return;
+    }
+
+    // -------------------------------------------------------
+    // BUILDING 4 / AI BUILDING
+    // Use backend graph + backend routing.
+    // -------------------------------------------------------
+
+    void (async () => {
+      try {
+        const data =
+          backendBuilding ||
+          (await loadBackendBuilding());
+
+        if (!data) {
+          setMessage(
+            "Unable to load the uploaded building."
+          );
+
+          setSimulationRunning(
+            false
+          );
+
+          return;
         }
 
-        const autoFire: Hazard = {
-          id: "hazard-fire-auto",
-          type: "fire",
-          position: randomPos,
-          severity: "high",
-        };
-
-        (autoFire as any).floorLevel =
-          fireFloorLevel;
-
-        const activeHazards = [autoFire];
-
-        setHazards(activeHazards);
-        setSelectedFloor(fireFloorLevel);
-
-        const updatedFloor =
-          getFloorGeometry(
-            selectedBuilding,
-            fireFloorLevel,
-            activeHazards
+        const backendFloors =
+          buildBackendFloorsFromGraph(
+            data
           );
 
-        setFloor(updatedFloor);
+        if (
+          backendFloors.length ===
+          0
+        ) {
+          throw new Error(
+            "The uploaded building contains no valid floors."
+          );
+        }
 
-        const reroutedPaths =
-          getRoutesForSelectedFloor(
-            selectedBuilding,
-            fireFloorLevel,
-            activeHazards
+        // ---------------------------------------------------
+        // NORMAL ROUTES BEFORE FIRE
+        // Route each generated occupant through the backend.
+        // ---------------------------------------------------
+
+        const normalRoutes =
+          await Promise.all(
+            occupants.map(
+              (occupant) =>
+                generateBackendRoute(
+                  occupant.roomId,
+                  occupant.profile,
+                  null,
+                  []
+                )
+            )
           );
 
-        setRoutes(reroutedPaths);
-      }, 2000);
-    } else {
-      // STOP SIMULATION
-      setSimulationRunning(false);
-      setHazards([]);
-      setMessage("");
+        // Remap occupantId from roomId to actual occupant.id
+        // so the Three.js scene engine can match routes to occupants
+        const remappedNormalRoutes = normalRoutes.flat().map((route) => {
+          const matchedOccupant = occupants.find(o => o.roomId === route.occupantId);
+          return {
+            ...route,
+            occupantId: matchedOccupant?.id || route.occupantId,
+          };
+        });
 
-      const cleanFloor = getFloorGeometry(
-        selectedBuilding,
-        selectedFloor,
-        []
-      );
+        setRoutes(
+          remappedNormalRoutes
+        );
 
-      setFloor(cleanFloor);
+        // ---------------------------------------------------
+        // FIRE ACTIVATION AFTER 2 SECONDS
+        // ---------------------------------------------------
 
-      setRoutes(
-        getRoutesForSelectedFloor(
-          selectedBuilding,
-          selectedFloor,
-          []
-        )
-      );
-    }
-  }, [
-    simulationRunning,
-    selectedBuilding,
-    selectedFloor,
-    customBuilding,
-    getFloorGeometry,
-    getRoutesForSelectedFloor,
-  ]);
+        timerRef.current =
+          setTimeout(() => {
+            void (async () => {
+              try {
+                const floorLevels =
+                  Array.from(
+                    new Set(
+                      data.nodes.map(
+                        (node) =>
+                          node.floor
+                      )
+                    )
+                  );
 
+                if (
+                  floorLevels.length ===
+                  0
+                ) {
+                  return;
+                }
+
+                const fireFloorLevel =
+                  floorLevels[
+                    Math.floor(
+                      Math.random() *
+                        floorLevels.length
+                    )
+                  ];
+
+                // Pick a real ROOM node on that
+                // floor so the backend knows exactly
+                // where the hazard is.
+                const roomCandidates =
+                  data.nodes.filter(
+                    (node) =>
+                      node.floor ===
+                        fireFloorLevel &&
+                      (
+                        node.type ===
+                          "room" ||
+                        node.type ===
+                          "lobby"
+                      )
+                  );
+
+                const fireNode =
+                  roomCandidates[
+                    Math.floor(
+                      Math.random() *
+                        roomCandidates.length
+                    )
+                  ] ||
+                  data.nodes.find(
+                    (node) =>
+                      node.floor ===
+                      fireFloorLevel &&
+                      node.type !==
+                        "exit"
+                  );
+
+                if (!fireNode) {
+                  throw new Error(
+                    "Unable to find a valid fire location."
+                  );
+                }
+
+                // Use adapted positions if available
+                const adaptedFirePos =
+                  adaptedBuilding?.positions?.get(
+                    fireNode.id
+                  );
+                const firePosition = {
+                  x:
+                    adaptedFirePos?.x ??
+                    (150 + Number(fireNode.x) * 1.45),
+                  y:
+                    adaptedFirePos?.y ??
+                    (80 + Number(fireNode.y) * 1.15),
+                };
+
+                const autoFire: Hazard = {
+                  id:
+                    "hazard-fire-auto",
+                  type: "fire",
+                  position:
+                    firePosition,
+                  severity: "high",
+                };
+
+                (
+                  autoFire as any
+                ).floorLevel =
+                  fireFloorLevel;
+
+                const activeHazards = [
+                  autoFire,
+                ];
+
+                setHazards(
+                  activeHazards
+                );
+
+                setSelectedFloor(
+                  fireFloorLevel
+                );
+
+                const updatedFloor =
+                  backendFloors.find(
+                    (floor) =>
+                      floor.floorLevel ===
+                      fireFloorLevel
+                  ) ||
+                  backendFloors[0];
+
+                if (updatedFloor) {
+                  setFloor(
+                    {
+                      ...updatedFloor,
+                      hazards:
+                        activeHazards,
+                    }
+                  );
+                }
+
+                // ------------------------------------------------
+                // Recalculate every occupant's route through
+                // the backend using fire/smoke sensor data.
+                // ------------------------------------------------
+
+                const fireSensors = [
+                  {
+                    id: "T1",
+                    type:
+                      "temperature",
+                    location:
+                      fireNode.id,
+                    value: 85,
+                    available: true,
+                  },
+                  {
+                    id: "S1",
+                    type: "smoke",
+                    location:
+                      fireNode.id,
+                    value: 90,
+                    available: true,
+                  },
+                ];
+
+                const rerouted =
+                  await Promise.all(
+                    occupants.map(
+                      (occupant) =>
+                        generateBackendRoute(
+                          occupant.roomId,
+                          occupant.profile,
+                          null,
+                          fireSensors
+                        )
+                    )
+                  );
+
+                // Remap occupantId from roomId to actual occupant.id
+                const remappedReroutes = rerouted.flat().map((route) => {
+                  const matchedOccupant = occupants.find(o => o.roomId === route.occupantId);
+                  return {
+                    ...route,
+                    occupantId: matchedOccupant?.id || route.occupantId,
+                  };
+                });
+
+                setRoutes(
+                  remappedReroutes
+                );
+              } catch (error) {
+                console.error(
+                  "Custom building simulation error:",
+                  error
+                );
+
+                setMessage(
+                  error instanceof Error
+                    ? error.message
+                    : "Unable to run the uploaded-building simulation."
+                );
+              }
+            })();
+          }, 2000);
+      } catch (error) {
+        console.error(
+          "Custom building simulation setup error:",
+          error
+        );
+
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to start simulation."
+        );
+
+        setSimulationRunning(
+          false
+        );
+      }
+    })();
+
+    return;
+  }
+
+  // =========================================================
+  // STOP SIMULATION
+  // =========================================================
+
+  setSimulationRunning(
+    false
+  );
+
+  setHazards([]);
+  setMessage("");
+
+  // Uploaded / AI building returns to backend-generated
+  // normal routes.
+  if (
+    selectedBuilding ===
+    CUSTOM_BUILDING_ID
+  ) {
+    void (async () => {
+      try {
+        const data =
+          backendBuilding ||
+          (await loadBackendBuilding());
+
+        if (!data) {
+          setRoutes([]);
+          return;
+        }
+
+        const normalRoutes =
+          await Promise.all(
+            occupants.map(
+              (occupant) =>
+                generateBackendRoute(
+                  occupant.roomId,
+                  occupant.profile,
+                  null,
+                  []
+                )
+            )
+          );
+
+        const remappedRoutes = normalRoutes.flat().map((route) => {
+          const matchedOccupant = occupants.find(o => o.roomId === route.occupantId);
+          return {
+            ...route,
+            occupantId: matchedOccupant?.id || route.occupantId,
+          };
+        });
+
+        setRoutes(
+          remappedRoutes
+        );
+
+        const geometry =
+          buildBackendFloorsFromGraph(
+            data
+          );
+
+        const current =
+          geometry.find(
+            (floor) =>
+              floor.floorLevel ===
+              selectedFloor
+          ) ||
+          geometry[0];
+
+        if (current) {
+          setFloor(current);
+        }
+      } catch (error) {
+        console.error(
+          "Custom building stop error:",
+          error
+        );
+
+        setRoutes([]);
+      }
+    })();
+
+    return;
+  }
+
+  // Existing demo buildings.
+  const cleanFloor =
+    getFloorGeometry(
+      selectedBuilding,
+      selectedFloor,
+      []
+    );
+
+  setFloor(cleanFloor);
+
+  setRoutes(
+    getRoutesForSelectedFloor(
+      selectedBuilding,
+      selectedFloor,
+      []
+    )
+  );
+}, [
+  simulationRunning,
+  selectedBuilding,
+  selectedFloor,
+  customBuilding,
+  backendBuilding,
+  occupants,
+  getFloorGeometry,
+  getRoutesForSelectedFloor,
+  generateBackendRoute,
+  loadBackendBuilding,
+  buildBackendFloorsFromGraph,
+]);
   // Toggle Emergency Fire Hazard Manually
   const handleToggleHazard = useCallback(() => {
     if (timerRef.current) {
@@ -819,6 +1624,7 @@ export default function DashboardPage() {
               hazards={hazards}
               routes={routes}
               allFloors={allBuildingFloors}
+              simulationRunning={simulationRunning}
               className="h-full w-full flex-1"
             />
           </div>

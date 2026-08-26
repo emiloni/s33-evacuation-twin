@@ -57,6 +57,9 @@ export class DigitalTwin3DScene {
   private selectedRoomId: string | null = null;
   private selectedOccupantId: string | null = null;
 
+  // Simulation State
+  private simulationActive = false;
+
   constructor(
     container: HTMLElement,
     callbacks: SceneEngineCallbacks = {},
@@ -284,6 +287,19 @@ export class DigitalTwin3DScene {
     this.setCameraPreset("isometric");
   }
 
+  /**
+   * Sets simulation state. Occupants only move when simulationActive is true.
+   */
+  public setSimulationRunning(running: boolean) {
+    this.simulationActive = running;
+    if (!running) {
+      // Stop all occupant locomotion
+      for (const occupant of this.occupantsMap.values()) {
+        occupant.stopEvacuation();
+      }
+    }
+  }
+
   public zoomIn() {
     this.targetSpherical.radius = Math.max(12, this.targetSpherical.radius * 0.8);
   }
@@ -366,12 +382,6 @@ export class DigitalTwin3DScene {
         visual.updateOccupantData(occupant, this.config);
       }
       visual.setSelected(selectedOccupantId === occupant.id);
-
-      // GUARANTEE LOCOMOTION & ANTI-OVERLAPPING: Start evacuation with index offset!
-      const activeRoute = this.currentRoutesMap.get(occupant.id);
-      if (activeRoute && activeRoute.path && activeRoute.path.length > 1) {
-        visual.startEvacuation(activeRoute.path, this.config, index);
-      }
     });
   }
 
@@ -393,10 +403,12 @@ export class DigitalTwin3DScene {
         this.scene.add(visual.group);
         this.routesMap.set(route.occupantId, visual);
 
-        // Instruct 3D person/wheelchair to physically run outward to their exit!
-        const occupantVisual = this.occupantsMap.get(route.occupantId);
-        if (occupantVisual) {
-          occupantVisual.startEvacuation(route.path, this.config, index);
+        // Only start occupant locomotion when simulation is active
+        if (this.simulationActive) {
+          const occupantVisual = this.occupantsMap.get(route.occupantId);
+          if (occupantVisual) {
+            occupantVisual.startEvacuation(route.path, this.config, index);
+          }
         }
       });
     } else {
