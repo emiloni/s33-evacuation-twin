@@ -490,9 +490,24 @@ def get_building(
     active = get_active_building()
 
     if active is not None:
+        nodes = active.get("nodes", [])
+        edges = active.get("edges", [])
+        # Safety net: if edges are missing, infer them
+        if len(edges) < len(nodes) - 1 and nodes:
+            from .building_service import _infer_edges_from_nodes
+            inferred = _infer_edges_from_nodes(nodes)
+            existing = {
+                tuple(sorted([e["from"], e["to"]]))
+                for e in edges
+            }
+            for ie in inferred:
+                key = tuple(sorted([ie["from"], ie["to"]]))
+                if key not in existing:
+                    edges.append(ie)
+                    existing.add(key)
         return {
-            "nodes": active.get("nodes", []),
-            "edges": active.get("edges", []),
+            "nodes": nodes,
+            "edges": edges,
         }
 
     # Fallback: load demo building

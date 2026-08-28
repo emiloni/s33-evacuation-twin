@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import math
 import re
 from typing import Any
 
@@ -45,6 +46,14 @@ IMPORTANT:
 - Do not create evacuation routes yourself.
 - The S33 deterministic routing engine will calculate routes later.
 
+CRITICAL - DOOR DETECTION:
+Doors are the most important feature for evacuation routing.
+You MUST:
+1. Detect EVERY door visible in the floor plan.
+2. For each door, add the x,y pixel coordinates to the edge connecting the two spaces.
+3. Doors appear as openings in walls between rooms and corridors.
+4. Place door coordinates AT the wall opening, NOT at room centers.
+
 Return ONLY valid JSON.
 Do not use markdown.
 Do not wrap the JSON in ```.
@@ -73,7 +82,9 @@ Return exactly this structure:
       "to": "F1_N2",
       "weight": 1,
       "type": "corridor",
-      "accessible": true
+      "accessible": true,
+      "door_x": 150,
+      "door_y": 120
     }
   ],
   "analysis": {
@@ -205,9 +216,129 @@ def _extract_json(text: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             pass
 
+    print("\n========== AI RAW RESPONSE ==========")
+    print(text)
+    print("========== END AI RAW RESPONSE ==========\n")
+
+
     raise ValueError(
         "AI returned invalid JSON."
     )
+
+
+
+def _infer_edges(nodes: list[dict]) -> list[dict]:
+    """Infer edges from spatial proximity when the AI returns few or no edges.
+
+    This is a fallback: when the vision model fails to output connectivity,
+    we connect nodes based on their 2D positions and types.
+    """
+
+    if not nodes:
+        return []
+
+    def _dist(a: dict, b: dict) -> float:
+        return math.hypot(a["x"] - b["x"], a["y"] - b["y"])
+
+    edges: list[dict] = []
+    edge_set: set[tuple[str, str]] = set()
+
+    def _add_edge(src: dict, dst: dict, etype: str, accessible: bool = True) -> None:
+        key = tuple(sorted([src["id"], dst["id"]]))
+        if key in edge_set or src["id"] == dst["id"]:
+            return
+        edge_set.add(key)
+        # Calculate door position: 80% from src toward dst (at wall boundary)
+        door_x = round(src["x"] + 0.8 * (dst["x"] - src["x"]))
+        door_y = round(src["y"] + 0.8 * (dst["y"] - src["y"]))
+        edges.append({
+            "from": src["id"],
+            "to": dst["id"],
+            "weight": round(_dist(src, dst), 1),
+            "type": etype,
+            "accessible": accessible,
+            "door_x": door_x,
+            "door_y": door_y,
+        })
+
+    # Classify nodes by type and floor
+    corridors = [n for n in nodes if n.get("type") == "corridor"]
+    rooms = [n for n in nodes if n.get("type") == "room"]
+    stairs = [n for n in nodes if n.get("type") == "stairs"]
+    elevators = [n for n in nodes if n.get("type") == "elevator"]
+    exits = [n for n in nodes if n.get("type") == "exit"]
+    junctions = [n for n in nodes if n.get("type") in ("junction", "entrance")]
+
+    # All walkable non-exit nodes
+    walkable = corridors + rooms + stairs + elevators + junctions
+
+    # 1) Connect every room to the nearest corridor on the same floor
+    for room in rooms:
+        same_floor_corridors = [c for c in corridors if c.get("floor") == room.get("floor")]
+        if same_floor_corridors:
+            nearest = min(same_floor_corridors, key=lambda c: _dist(room, c))
+            _add_edge(room, nearest, "corridor", accessible=True)
+
+    # 2) Connect corridors to nearest corridors on the same floor
+    #    (useful when there are multiple corridor segments)
+    for i, c1 in enumerate(corridors):
+        same_floor_others = [
+            c2 for j, c2 in enumerate(corridors)
+            if j != i and c2.get("floor") == c1.get("floor")
+        ]
+        if same_floor_others:
+            nearest = min(same_floor_others, key=lambda c: _dist(c1, c))
+            _add_edge(c1, nearest, "corridor", accessible=True)
+
+    # 3) Connect stairs/elevators to nearest corridor on the same floor
+    for node in stairs + elevators:
+        same_floor_corridors = [c for c in corridors if c.get("floor") == node.get("floor")]
+        if same_floor_corridors:
+            nearest = min(same_floor_corridors, key=lambda c: _dist(node, c))
+            etype = node.get("type", "corridor")
+            acc = etype != "stairs"
+            _add_edge(node, nearest, etype, accessible=acc)
+
+    # 4) Connect stairs/elevators to nearest stair/elevator on any floor
+    #    (vertical connections between floors)
+    for s1 in stairs + elevators:
+        for s2 in stairs + elevators:
+            if s1["id"] == s2["id"]:
+                continue
+            if s1.get("floor") != s2.get("floor"):
+                # Only connect if same label prefix (e.g. STAIR_A on floor 1 and 2)
+                label1 = s1.get("label", "").upper()
+                label2 = s2.get("label", "").upper()
+                # Extract the prefix before digits
+                import re
+                prefix1 = re.sub(r'\d+.*$', '', label1).strip()
+                prefix2 = re.sub(r'\d+.*$', '', label2).strip()
+                if prefix1 and prefix1 == prefix2:
+                    etype = s1.get("type", "corridor")
+                    acc = etype != "stairs"
+                    _add_edge(s1, s2, etype, accessible=acc)
+
+    # 5) Connect exits to nearest walkable node (stairs preferred if close)
+    for exit_node in exits:
+        candidates = stairs + corridors + elevators
+        if candidates:
+            # Prefer stairs within 1.5x the nearest distance
+            nearest_all = min(candidates, key=lambda c: _dist(exit_node, c))
+            nearest_dist = _dist(exit_node, nearest_all)
+            near_stairs = [s for s in stairs if _dist(exit_node, s) <= nearest_dist * 2.0]
+            target = min(near_stairs, key=lambda c: _dist(exit_node, c)) if near_stairs else nearest_all
+            _add_edge(exit_node, target, "corridor", accessible=True)
+
+    # 6) If still no corridors, connect rooms directly to nearest walkable node
+    if not corridors:
+        for room in rooms:
+            others = [n for n in walkable if n["id"] != room["id"]]
+            if others:
+                nearest = min(others, key=lambda n: _dist(room, n))
+                _add_edge(room, nearest, "corridor", accessible=True)
+
+    return edges
+
 
 
 def _normalise_graph(
@@ -308,14 +439,14 @@ def _normalise_graph(
         source = str(
             edge.get(
                 "from",
-                "",
+                edge.get("from_node", ""),
             )
         )
 
         target = str(
             edge.get(
                 "to",
-                "",
+                edge.get("to_node", ""),
             )
         )
 
@@ -444,6 +575,22 @@ def _normalise_graph(
             }
         )
 
+    # ---------------------------------------------------------
+    # FALLBACK: INFER EDGES FROM SPATIAL PROXIMITY
+    # ---------------------------------------------------------
+    # If the AI returned no edges (or very few), generate them from
+    # node positions so the graph is always connected.
+    if len(clean_edges) < len(clean_nodes) - 1:
+        inferred = _infer_edges(clean_nodes)
+        existing = {
+            tuple(sorted([e["from"], e["to"]]))
+            for e in clean_edges
+        }
+        for ie in inferred:
+            key = tuple(sorted([ie["from"], ie["to"]]))
+            if key not in existing:
+                clean_edges.append(ie)
+                existing.add(key)
     # ---------------------------------------------------------
     # BUILDING / ANALYSIS
     # ---------------------------------------------------------
@@ -609,7 +756,7 @@ def analyze_floorplan(
             },
         ],
         "temperature": 0,
-        "max_tokens": 7000,
+        "max_tokens": 1581,
     }
 
     response = requests.post(

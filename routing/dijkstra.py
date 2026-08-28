@@ -86,7 +86,7 @@ def find_route(
             "distance": distance,
         }
 
-    except nx.NetworkXNoPath:
+    except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
 
         return {
             "success": False,

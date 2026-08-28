@@ -59,8 +59,8 @@ def build_graph_from_data(
     for edge in edges:
 
         graph.add_edge(
-            edge["from"],
-            edge["to"],
+            edge.get("from", edge.get("from_node", "")),
+            edge.get("to", edge.get("to_node", "")),
             weight=edge.get(
                 "weight",
                 1

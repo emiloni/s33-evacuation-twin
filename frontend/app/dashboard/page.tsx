@@ -252,7 +252,8 @@ const loadBackendBuilding = useCallback(
 
       const rawText =
         await response.text();
-
+console.log("AI PARSE STATUS:", response.status);
+console.log("AI PARSE RAW RESPONSE:", rawText);
       console.log(
         "GET BUILDING RAW RESPONSE:",
         rawText
@@ -275,6 +276,7 @@ const loadBackendBuilding = useCallback(
         throw new Error(
           "Building API returned invalid JSON."
         );
+        
       }
 
       console.log(

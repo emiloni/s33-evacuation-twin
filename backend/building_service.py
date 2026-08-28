@@ -174,6 +174,75 @@ def validate_building(
     }
 
 
+def _infer_edges_from_nodes(nodes: list) -> list:
+    """Infer edges from spatial proximity when edges are missing."""
+    import math
+
+    if not nodes:
+        return []
+
+    def dist(a, b):
+        return math.hypot(a["x"] - b["x"], a["y"] - b["y"])
+
+    edges = []
+    seen = set()
+
+    def add_edge(src, dst, etype, accessible=True):
+        key = tuple(sorted([src["id"], dst["id"]]))
+        if key in seen or src["id"] == dst["id"]:
+            return
+        seen.add(key)
+        # Calculate door position: 80% from src toward dst (at wall boundary)
+        door_x = round(src["x"] + 0.8 * (dst["x"] - src["x"]))
+        door_y = round(src["y"] + 0.8 * (dst["y"] - src["y"]))
+        edges.append({
+            "from": src["id"],
+            "to": dst["id"],
+            "weight": round(dist(src, dst), 1),
+            "type": etype,
+            "accessible": accessible,
+            "door_x": door_x,
+            "door_y": door_y,
+        })
+
+    corridors = [n for n in nodes if n.get("type") == "corridor"]
+    rooms = [n for n in nodes if n.get("type") == "room"]
+    stairs = [n for n in nodes if n.get("type") == "stairs"]
+    elevators = [n for n in nodes if n.get("type") == "elevator"]
+    exits = [n for n in nodes if n.get("type") == "exit"]
+    walkable = corridors + rooms + stairs + elevators
+
+    for room in rooms:
+        same_floor = [c for c in corridors if c.get("floor") == room.get("floor")]
+        if same_floor:
+            nearest = min(same_floor, key=lambda c: dist(room, c))
+            add_edge(room, nearest, "corridor")
+
+    for node in stairs + elevators:
+        same_floor = [c for c in corridors if c.get("floor") == node.get("floor")]
+        if same_floor:
+            nearest = min(same_floor, key=lambda c: dist(node, c))
+            add_edge(node, nearest, node.get("type", "corridor"), accessible=node.get("type") != "stairs")
+
+    for exit_node in exits:
+        candidates = stairs + corridors + elevators
+        if candidates:
+            nearest_all = min(candidates, key=lambda c: dist(exit_node, c))
+            nearest_dist = dist(exit_node, nearest_all)
+            near_stairs = [s for s in stairs if dist(exit_node, s) <= nearest_dist * 2.0]
+            target = min(near_stairs, key=lambda c: dist(exit_node, c)) if near_stairs else nearest_all
+            add_edge(exit_node, target, "corridor")
+
+    if not corridors:
+        for room in rooms:
+            others = [n for n in walkable if n["id"] != room["id"]]
+            if others:
+                nearest = min(others, key=lambda n: dist(room, n))
+                add_edge(room, nearest, "corridor")
+
+    return edges
+
+
 def activate_building(
     dataset: BuildingDataset
 ) -> Dict[str, Any]:
@@ -185,6 +254,22 @@ def activate_building(
     building = dataset.model_dump(
         by_alias=True
     )
+
+    # If edges are missing, infer them from node positions
+    stored_edges = building.get("edges", [])
+    stored_nodes = building.get("nodes", [])
+    if len(stored_edges) < len(stored_nodes) - 1 and stored_nodes:
+        inferred = _infer_edges_from_nodes(stored_nodes)
+        existing = {
+            tuple(sorted([e["from"], e["to"]]))
+            for e in stored_edges
+        }
+        for ie in inferred:
+            key = tuple(sorted([ie["from"], ie["to"]]))
+            if key not in existing:
+                stored_edges.append(ie)
+                existing.add(key)
+        building["edges"] = stored_edges
 
     set_active_building(
         building
