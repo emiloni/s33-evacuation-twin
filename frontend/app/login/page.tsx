@@ -96,7 +96,7 @@ async function handleLogin(
       "true"
     );
 
-    router.push("/dashboard");
+    router.push("/buildings/new");
   } catch (err) {
     setError(
       err instanceof Error

@@ -6,8 +6,6 @@ from typing import (
     Set,
 )
 
-import math
-
 import networkx as nx
 
 from .graph import build_graph
@@ -36,7 +34,6 @@ def get_available_exits(
 
     return exits
 
-
 def find_best_exit(
     start: str,
     mobility: str = "normal",
@@ -49,21 +46,31 @@ def find_best_exit(
     ] = None,
 ) -> Dict[str, Any]:
 
-    # ---------------------------------------------------------
     # Defaults
-    # ---------------------------------------------------------
-
     if blocked_nodes is None:
         blocked_nodes = set()
 
     if occupancy is None:
         occupancy = {}
 
-    # ---------------------------------------------------------
-    # Build graph
-    # ---------------------------------------------------------
+    if sensors is None:
+        sensors = []
 
+    # Build graph
     graph = build_graph()
+
+    # Detect nodes affected by fire
+    hazardous_nodes = get_hazardous_nodes(
+        graph,
+        sensors,
+        safety_radius=250.0,
+    )
+
+    # Combine manually blocked nodes and hazard nodes
+    blocked_nodes = (
+        set(blocked_nodes)
+        | hazardous_nodes
+    )
 
     # ---------------------------------------------------------
     # Validate starting node
@@ -83,46 +90,19 @@ def find_best_exit(
             ),
         }
 
-    # ---------------------------------------------------------
-    # FALLBACK: If the starting node is blocked, find the
-    # nearest unblocked neighbor and route from there.
-    # ---------------------------------------------------------
-
-    rerouted = False
-    original_start = start
-
     if start in blocked_nodes:
-        best_neighbor = None
-        best_dist = float("inf")
 
-        for neighbor in graph.neighbors(start):
-            if neighbor in blocked_nodes:
-                continue
-            s_data = graph.nodes.get(start, {})
-            n_data = graph.nodes.get(neighbor, {})
-            d = math.hypot(
-                s_data.get("x", 0) - n_data.get("x", 0),
-                s_data.get("y", 0) - n_data.get("y", 0),
-            )
-            if d < best_dist:
-                best_dist = d
-                best_neighbor = neighbor
-
-        if best_neighbor is not None:
-            start = best_neighbor
-            rerouted = True
-        else:
-            return {
-                "success": False,
-                "exit": None,
-                "route": [],
-                "distance": None,
-                "available_exits": [],
-                "error": (
-                    f"Starting node '{original_start}' "
-                    "is blocked and has no safe neighbors."
-                ),
-            }
+        return {
+            "success": False,
+            "exit": None,
+            "route": [],
+            "distance": None,
+            "available_exits": [],
+            "error": (
+                f"Starting node '{start}' "
+                "is blocked or unsafe."
+            ),
+        }
 
     # ---------------------------------------------------------
     # Find available exits
@@ -145,6 +125,7 @@ def find_best_exit(
                 "No available evacuation exits."
             ),
         }
+    
 
     # ---------------------------------------------------------
     # Remove blocked nodes
@@ -257,14 +238,12 @@ def find_best_exit(
                 weight="routing_weight",
             )
 
-            distance = (
-                nx.dijkstra_path_length(
-                    graph,
-                    start,
-                    exit_node,
-                    weight="routing_weight",
-                )
-            )
+            distance, route = nx.single_source_dijkstra(
+    graph,
+    start,
+    exit_node,
+    weight="routing_weight",
+)
 
             if (
                 best_distance is None
@@ -306,14 +285,6 @@ def find_best_exit(
     # ---------------------------------------------------------
     # Success
     # ---------------------------------------------------------
-
-    # If we rerouted from a blocked start, prepend the
-    # original position so the occupant's full path is
-    # shown.
-    if rerouted and best_route:
-        best_route = (
-            [original_start] + list(best_route)
-        )
 
     return {
         "success": True,

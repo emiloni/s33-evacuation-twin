@@ -63,7 +63,7 @@ export default function SignupPage() {
         );
       }
 
-      router.push("/login?registered=true");
+      router.push("/buildings/new");
 
     } catch (err) {
       setError(
