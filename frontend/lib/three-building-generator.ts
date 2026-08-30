@@ -7,6 +7,7 @@ export interface Building3DConfig {
   wallThickness: number;
   slabThickness: number;
   centerOrigin: { x: number; y: number };
+  buildingSource?: "demo" | "ai";
 }
 
 export const DEFAULT_3D_CONFIG: Building3DConfig = {
@@ -535,30 +536,37 @@ function buildRoom3D(
   // 2. Extruded Walls
   // 2. Extruded Walls
 const isCorridor = room.type === "corridor";
+const isAI = config.buildingSource === "ai";
 
-// IMPORTANT:
-// Corridors are navigation spaces.
-// Do not generate another set of physical walls around them,
-// because adjacent rooms already generate the corridor boundaries.
-if (isCorridor) {
+// AI-parsed buildings: corridors are navigation spaces
+// and should not have physical walls (adjacent rooms
+// already generate the corridor boundaries).
+if (isCorridor && isAI) {
   return group;
 }
 
-let wallMat: THREE.Material = materials.wallSolid;
+// Demo buildings: corridors use glass walls (original behavior).
+// This gives corridors visual structure and connected appearance.
+let wallMat: THREE.Material = isCorridor
+  ? materials.wallGlass
+  : materials.wallSolid;
 
 if (!isActiveFloor) {
-  wallMat = new THREE.MeshStandardMaterial({
-    color: 0x334155,
-    roughness: 0.6,
-    metalness: 0.2,
-    transparent: true,
-    opacity: 0.85,
-  });
+  wallMat = isCorridor
+    ? materials.wallGlass
+    : new THREE.MeshStandardMaterial({
+        color: 0x334155,
+        roughness: 0.6,
+        metalness: 0.2,
+        transparent: true,
+        opacity: 0.85,
+      });
 }
 
-
-
-  const wallH = isCorridor ? config.wallHeight * 0.75 : config.wallHeight;
+  // Corridors use reduced wall height (original behavior).
+  const wallH = isCorridor
+    ? config.wallHeight * 0.75
+    : config.wallHeight;
 
   const doorWorldPositions = (allDoors || []).map((d) => toWorldCoords(d.position, config));
 
@@ -571,6 +579,9 @@ if (!isActiveFloor) {
     if (segLen < 0.01) continue;
 
     let doorParam: number | null = null;
+
+    // Detect doors and exits on this wall segment
+    // and create gaps so they are never blocked.
     for (const dPos of doorWorldPositions) {
       const proj = projectPointOnSegment(dPos, p1, p2);
       if (proj.dist < 1.4 && proj.t > 0.04 && proj.t < 0.96) {

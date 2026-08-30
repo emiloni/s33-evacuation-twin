@@ -227,7 +227,7 @@ export default function Home() {
               </button>
 
               <button
-                onClick={() => router.push("/buildings/new")}
+                onClick={() => router.push("/login")}
                 className="rounded-xl border border-slate-300 bg-white px-7 py-4 text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
               >
                 Building Administration →
@@ -453,7 +453,7 @@ export default function Home() {
               </div>
 
               <div className="mt-5 text-lg font-black">
-                Live evacuation
+                Try Demo Buildings
               </div>
 
               <p className="mt-2 text-sm leading-6 text-slate-500">
@@ -464,7 +464,7 @@ export default function Home() {
             </button>
 
             <button
-              onClick={() => router.push("/dashboard")}
+              onClick={() => router.push("/login")}
               className="group rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-emerald-300 hover:shadow-lg"
             >
 

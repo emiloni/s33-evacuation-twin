@@ -3,6 +3,7 @@
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import type { FloorGeometry, Hazard, Occupant, RouteSegment, Room } from "@/lib/schema";
 import { DigitalTwin3DScene, CameraPreset } from "@/lib/three-scene-engine";
+import { DEFAULT_3D_CONFIG } from "@/lib/three-building-generator";
 import Icons from "@/lib/icon-set";
 
 interface DigitalTwinCanvas3DProps {
@@ -15,6 +16,7 @@ interface DigitalTwinCanvas3DProps {
   simulationRunning?: boolean;
   onSelectRoom?: (room: Room | null) => void;
   onSelectOccupant?: (occupant: Occupant | null) => void;
+  buildingSource?: "demo" | "ai";
   className?: string;
 }
 
@@ -28,6 +30,7 @@ export default function DigitalTwinCanvas3D({
   simulationRunning = false,
   onSelectRoom,
   onSelectOccupant,
+  buildingSource = "demo",
   className = "",
 }: DigitalTwinCanvas3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -60,7 +63,7 @@ export default function DigitalTwinCanvas3D({
           setSelectedEntity((curr) => (curr?.type === "occupant" ? null : curr));
         }
       },
-    });
+    }, { ...DEFAULT_3D_CONFIG, buildingSource });
 
     sceneEngineRef.current = engine;
 

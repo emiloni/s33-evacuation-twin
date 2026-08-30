@@ -1575,6 +1575,7 @@ console.log("[Sim] ALL RAW ROUTE RESULTS:", rerouted);
               routes={routes}
               allFloors={allBuildingFloors}
               simulationRunning={simulationRunning}
+              buildingSource={selectedBuilding === CUSTOM_BUILDING_ID ? "ai" : "demo"}
               className="h-full w-full flex-1"
             />
           </div>
