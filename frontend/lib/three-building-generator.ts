@@ -533,19 +533,30 @@ function buildRoom3D(
   group.add(floorMesh);
 
   // 2. Extruded Walls
-  const isCorridor = room.type === "corridor";
-  let wallMat = isCorridor ? materials.wallGlass : materials.wallSolid;
-  if (!isActiveFloor) {
-    wallMat = isCorridor
-      ? materials.wallGlass
-      : new THREE.MeshStandardMaterial({
-          color: 0x334155,
-          roughness: 0.6,
-          metalness: 0.2,
-          transparent: true,
-          opacity: 0.85,
-        });
-  }
+  // 2. Extruded Walls
+const isCorridor = room.type === "corridor";
+
+// IMPORTANT:
+// Corridors are navigation spaces.
+// Do not generate another set of physical walls around them,
+// because adjacent rooms already generate the corridor boundaries.
+if (isCorridor) {
+  return group;
+}
+
+let wallMat: THREE.Material = materials.wallSolid;
+
+if (!isActiveFloor) {
+  wallMat = new THREE.MeshStandardMaterial({
+    color: 0x334155,
+    roughness: 0.6,
+    metalness: 0.2,
+    transparent: true,
+    opacity: 0.85,
+  });
+}
+
+
 
   const wallH = isCorridor ? config.wallHeight * 0.75 : config.wallHeight;
 

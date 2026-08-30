@@ -7,6 +7,7 @@ MOBILITY_TYPES = {
     "temporary_injury",
     "child",
     "elderly",
+    "first_responder",
 }
 
 HAZARD_TYPES = {
@@ -30,7 +31,6 @@ def edge_allowed(
 
     blocked_nodes = blocked_nodes or set()
 
-    # Decision #003:
     # Wheelchair users cannot use stairs.
     if (
         mobility == "wheelchair"

@@ -11,7 +11,6 @@ class BuildingNode(BaseModel):
     floor: int = 1
     label: Optional[str] = None
 
-
 class BuildingEdge(BaseModel):
     model_config = ConfigDict(
         validate_by_name=True,
@@ -33,6 +32,10 @@ class BuildingEdge(BaseModel):
     type: str = "corridor"
 
     accessible: bool = True
+
+    # Optional physical opening connecting the two spaces.
+    door_x: Optional[float] = None
+    door_y: Optional[float] = None
 
 
 class BuildingDataset(BaseModel):

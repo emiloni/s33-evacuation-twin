@@ -6,12 +6,14 @@ from typing import (
     Set,
 )
 
+import math
+
 import networkx as nx
 
 from .graph import build_graph
 from .constraints import edge_allowed
 from .occupancy import occupancy_penalty
-
+from .safety import get_hazardous_nodes
 
 def get_available_exits(
     graph: nx.Graph,
@@ -41,6 +43,9 @@ def find_best_exit(
     blocked_nodes: Optional[Set[str]] = None,
     occupancy: Optional[
         Dict[str, float]
+    ] = None,
+    sensors: Optional[
+        List[Dict[str, Any]]
     ] = None,
 ) -> Dict[str, Any]:
 
@@ -78,19 +83,46 @@ def find_best_exit(
             ),
         }
 
-    if start in blocked_nodes:
+    # ---------------------------------------------------------
+    # FALLBACK: If the starting node is blocked, find the
+    # nearest unblocked neighbor and route from there.
+    # ---------------------------------------------------------
 
-        return {
-            "success": False,
-            "exit": None,
-            "route": [],
-            "distance": None,
-            "available_exits": [],
-            "error": (
-                f"Starting node '{start}' "
-                "is blocked or unsafe."
-            ),
-        }
+    rerouted = False
+    original_start = start
+
+    if start in blocked_nodes:
+        best_neighbor = None
+        best_dist = float("inf")
+
+        for neighbor in graph.neighbors(start):
+            if neighbor in blocked_nodes:
+                continue
+            s_data = graph.nodes.get(start, {})
+            n_data = graph.nodes.get(neighbor, {})
+            d = math.hypot(
+                s_data.get("x", 0) - n_data.get("x", 0),
+                s_data.get("y", 0) - n_data.get("y", 0),
+            )
+            if d < best_dist:
+                best_dist = d
+                best_neighbor = neighbor
+
+        if best_neighbor is not None:
+            start = best_neighbor
+            rerouted = True
+        else:
+            return {
+                "success": False,
+                "exit": None,
+                "route": [],
+                "distance": None,
+                "available_exits": [],
+                "error": (
+                    f"Starting node '{original_start}' "
+                    "is blocked and has no safe neighbors."
+                ),
+            }
 
     # ---------------------------------------------------------
     # Find available exits
@@ -275,6 +307,14 @@ def find_best_exit(
     # Success
     # ---------------------------------------------------------
 
+    # If we rerouted from a blocked start, prepend the
+    # original position so the occupant's full path is
+    # shown.
+    if rerouted and best_route:
+        best_route = (
+            [original_start] + list(best_route)
+        )
+
     return {
         "success": True,
         "exit": best_exit,
@@ -284,3 +324,4 @@ def find_best_exit(
             available_exits
         ),
     }
+

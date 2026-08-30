@@ -192,17 +192,12 @@ def _infer_edges_from_nodes(nodes: list) -> list:
         if key in seen or src["id"] == dst["id"]:
             return
         seen.add(key)
-        # Calculate door position: 80% from src toward dst (at wall boundary)
-        door_x = round(src["x"] + 0.8 * (dst["x"] - src["x"]))
-        door_y = round(src["y"] + 0.8 * (dst["y"] - src["y"]))
         edges.append({
             "from": src["id"],
             "to": dst["id"],
             "weight": round(dist(src, dst), 1),
             "type": etype,
             "accessible": accessible,
-            "door_x": door_x,
-            "door_y": door_y,
         })
 
     corridors = [n for n in nodes if n.get("type") == "corridor"]
@@ -224,14 +219,15 @@ def _infer_edges_from_nodes(nodes: list) -> list:
             nearest = min(same_floor, key=lambda c: dist(node, c))
             add_edge(node, nearest, node.get("type", "corridor"), accessible=node.get("type") != "stairs")
 
+    # Connect exits to nearest corridor (exits are escape routes, not vertical connections)
     for exit_node in exits:
-        candidates = stairs + corridors + elevators
-        if candidates:
-            nearest_all = min(candidates, key=lambda c: dist(exit_node, c))
-            nearest_dist = dist(exit_node, nearest_all)
-            near_stairs = [s for s in stairs if dist(exit_node, s) <= nearest_dist * 2.0]
-            target = min(near_stairs, key=lambda c: dist(exit_node, c)) if near_stairs else nearest_all
-            add_edge(exit_node, target, "corridor")
+        if corridors:
+            nearest_corridor = min(corridors, key=lambda c: dist(exit_node, c))
+            add_edge(exit_node, nearest_corridor, "corridor")
+        elif stairs + elevators:
+            candidates = stairs + elevators
+            nearest = min(candidates, key=lambda c: dist(exit_node, c))
+            add_edge(exit_node, nearest, "corridor")
 
     if not corridors:
         for room in rooms:

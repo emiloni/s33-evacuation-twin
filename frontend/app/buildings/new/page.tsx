@@ -237,6 +237,12 @@ export default function NewBuildingPage() {
           );
         }
 
+        if (aiResponse.status === 401) {
+          localStorage.removeItem("s33_access_token");
+          localStorage.removeItem("s33-token");
+          router.push("/login");
+          return;
+        }
         if (!aiResponse.ok || !aiData?.success) {
           throw new Error(
             aiData?.detail ||
@@ -565,6 +571,13 @@ allEdges.push(...floorEdges);
           },
           assemblyArea,
         })
+      );
+
+      // Store the raw building dataset so it can be
+      // re-activated on the backend after a server restart.
+      localStorage.setItem(
+        "s33-custom-building-dataset",
+        JSON.stringify(dataset)
       );
 
       setSuccess(

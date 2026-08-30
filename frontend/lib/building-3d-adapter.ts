@@ -359,69 +359,105 @@ export function adaptBuilding(data: ApiBuilding): AdaptedBuilding {
         };
       });
 
-        // Doors (placed at room polygon boundary)
-    function findDoorPosition(fromPos: Point, toPos: Point, fromNodeId: string, toNodeId: string, roomPolygons: Map<string, Point[]>): Point {
-      const fromPoly = roomPolygons.get(fromNodeId);
-      const toPoly = roomPolygons.get(toNodeId);
-      const poly = fromPoly || toPoly;
-      const polyCenter = fromPoly ? fromPos : toPos;
-      const otherPos = fromPoly ? toPos : fromPos;
-      if (poly && poly.length >= 3) {
-        let bestPoint = { x: (fromPos.x + toPos.x) / 2, y: (fromPos.y + toPos.y) / 2 };
-        const dx = otherPos.x - polyCenter.x;
-        const dy = otherPos.y - polyCenter.y;
-        const lineLen = Math.hypot(dx, dy);
-        if (lineLen < 0.01) return bestPoint;
-        let bestT = Infinity;
-        for (let i = 0; i < poly.length; i++) {
-          const p1 = poly[i];
-          const p2 = poly[(i + 1) % poly.length];
-          const ex = p2.x - p1.x; const ey = p2.y - p1.y;
-          const denom = dx * ey - dy * ex;
-          if (Math.abs(denom) < 0.001) continue;
-          const t = ((p1.x - polyCenter.x) * ey - (p1.y - polyCenter.y) * ex) / denom;
-          const u = ((p1.x - polyCenter.x) * dy - (p1.y - polyCenter.y) * dx) / denom;
-          if (t > 0.01 && t < 2.0 && u >= -0.05 && u <= 1.05) {
-            const dist = Math.abs(t - 1.0);
-            if (dist < bestT) { bestT = dist; bestPoint = { x: polyCenter.x + t * dx, y: polyCenter.y + t * dy }; }
-          }
-        }
-        return bestPoint;
-      }
-      return { x: (fromPos.x + toPos.x) / 2, y: (fromPos.y + toPos.y) / 2 };
-    }
+    // ── Doors ───────────────────────────────────────────────
+    // Doors are ONLY created for room-to-corridor connections.
+    // Exit nodes, stairs, and elevators do NOT receive room doors.
+    // A door position is computed by intersecting the line between
+    // the room center and corridor center with the room polygon boundary.
+    // The door angle matches the wall edge that was crossed.
+    // ────────────────────────────────────────────────────────
     const roomPolygons = new Map<string, Point[]>();
-    for (const room of rooms) { roomPolygons.set(room.id, room.polygon); }
+    for (const room of rooms) {
+      roomPolygons.set(room.id, room.polygon);
+    }
 
-    const doors: Door[] = floorEdges
-      .filter((e) => e.type !== "stairs" && e.type !== "elevator")
-      .map((edge, index) => {
-        const from = positions.get(edge.from_node) || { x: 500, y: 350 };
-        const to = positions.get(edge.to_node) || { x: 500, y: 350 };
-        
-        // Use door_x/door_y from edge if available, otherwise calculate position
-        let doorPos: Point;
-        const edgeAny = edge as any;
-        if (edgeAny.door_x !== undefined && edgeAny.door_y !== undefined) {
-          // Transform raw AI coordinates to canvas space
-          doorPos = transformNodeToCanvas(
-            { x: edgeAny.door_x, y: edgeAny.door_y },
-            bounds
-          );
-        } else {
-          // Fallback to intersection calculation
-          doorPos = findDoorPosition(from, to, edge.from_node, edge.to_node, roomPolygons);
+    const nodeTypeMap = new Map<string, string>();
+    for (const n of floorNodes) nodeTypeMap.set(n.id, n.type.toLowerCase());
+
+    /**
+     * Finds where a ray from `from` toward `to` exits the polygon,
+     * and returns both the exit point and the wall angle.
+     * The exit point is the LAST polygon intersection (farthest from the
+     * room center, i.e. the wall closest to the corridor).
+     */
+    function findDoorOnWall(
+      from: Point,
+      to: Point,
+      poly: Point[]
+    ): { position: Point; angle: number } | null {
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 0.01) return null;
+
+      // Find the intersection with the LARGEST t (exit point from polygon)
+      let bestT = -Infinity;
+      let wallAngle = 0;
+
+      for (let i = 0; i < poly.length; i++) {
+        const p1 = poly[i];
+        const p2 = poly[(i + 1) % poly.length];
+        const ex = p2.x - p1.x;
+        const ey = p2.y - p1.y;
+        const denom = dx * ey - dy * ex;
+        if (Math.abs(denom) < 0.001) continue;
+        const t = ((p1.x - from.x) * ey - (p1.y - from.y) * ex) / denom;
+        const u = ((p1.x - from.x) * dy - (p1.y - from.y) * dx) / denom;
+        // t > 0 means forward along ray; u ∈ [0,1] means on the segment
+        if (t > 0.01 && t < 3.0 && u >= -0.05 && u <= 1.05 && t > bestT) {
+          bestT = t;
+          // Wall angle = angle of the polygon edge segment
+          const segDx = p2.x - p1.x;
+          const segDy = p2.y - p1.y;
+          wallAngle = Math.abs(segDx) >= Math.abs(segDy) ? 0 : 90;
         }
-        
-        return {
-          id: `AI_DOOR_${'${floorLevel}'}_${'${index}'}`,
-          position: doorPos,
-          connects: [edge.from_node, edge.to_node] as [string, string],
-          accessible: edge.accessible,
-          confidence: "high" as const,
-          angle: Math.atan2(to.y - from.y, to.x - from.x) * (180 / Math.PI),
-        };
+      }
+
+      if (bestT < 0) return null;
+      return {
+        position: { x: from.x + bestT * dx, y: from.y + bestT * dy },
+        angle: wallAngle,
+      };
+    }
+
+    const doors: Door[] = [];
+    let doorIndex = 0;
+    for (const edge of floorEdges) {
+      // Only create doors for room ↔ corridor connections.
+      // Skip: stairs, elevators, exit-to-any, any-to-exit.
+      if (edge.type === "stairs" || edge.type === "elevator") continue;
+      const fromType = nodeTypeMap.get(edge.from_node) || "";
+      const toType = nodeTypeMap.get(edge.to_node) || "";
+      if (fromType === "exit" || toType === "exit") continue;
+
+      // One side must be a room, the other must be a corridor/lobby
+      const fromIsRoom = ["room", "office", "lobby", "meeting_room", "break_room", "restroom"].includes(fromType);
+      const toIsRoom = ["room", "office", "lobby", "meeting_room", "break_room", "restroom"].includes(toType);
+      const fromIsCorridor = fromType === "corridor" || fromType === "lobby";
+      const toIsCorridor = toType === "corridor" || toType === "lobby";
+      if (!(fromIsRoom && toIsCorridor) && !(toIsRoom && fromIsCorridor)) continue;
+
+      // The room node has the polygon we intersect against
+      const roomNodeId = fromIsRoom ? edge.from_node : edge.to_node;
+      const corridorNodeId = fromIsCorridor ? edge.from_node : edge.to_node;
+      const roomPos = positions.get(roomNodeId) || { x: 500, y: 350 };
+      const corridorPos = positions.get(corridorNodeId) || { x: 500, y: 350 };
+      const roomPoly = roomPolygons.get(roomNodeId);
+      if (!roomPoly || roomPoly.length < 3) continue;
+
+      const result = findDoorOnWall(roomPos, corridorPos, roomPoly);
+      if (!result) continue;
+
+      doors.push({
+        id: `AI_DOOR_${floorLevel}_${doorIndex}`,
+        position: result.position,
+        connects: [roomNodeId, corridorNodeId] as [string, string],
+        accessible: edge.accessible,
+        confidence: "high" as const,
+        angle: result.angle,
       });
+      doorIndex++;
+    }
 
 // ── Stairwells ──
     const stairwells: Stairwell[] = floorNodes

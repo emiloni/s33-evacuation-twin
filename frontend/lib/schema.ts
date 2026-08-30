@@ -136,4 +136,5 @@ export interface RouteSegment {
     | "live_sensors"
     | "static_fallback";
   isRerouted?: boolean;
+  blockedNodes?: string[];
 }

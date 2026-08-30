@@ -429,32 +429,9 @@ export class OccupantVisual3D {
    * Starts physical evacuation along the calculated 3D spline route with anti-overlapping lane offsets
    */
   public startEvacuation(path: Point[], config: Building3DConfig, index = 0) {
-    if (!path || path.length < 2) return;
-
-    const points3D = path.map((p) => {
-      const v = toWorldCoords(p, config);
-      const level = (p as any).level || 1;
-      const yLevel = (level - 1) * 3.5;
-      return new THREE.Vector3(v.x, yLevel, v.z);
-    });
-
-    this.evacuationCurve = new THREE.CatmullRomCurve3(points3D, false, "centripetal", 0.2);
-
-    // Stagger start times so occupants queue single-file without overlapping
-    this.startDelay = index * 0.08;
-    this.evacuationProgress = -this.startDelay;
-
-    // Perpendicular lane offset (-0.35, 0, or +0.35 world units) to prevent corridor overlapping
-    this.laneOffset = ((index % 3) - 1) * 0.35;
-    this.isEvacuating = true;
-
-    // Natural, swift evacuation running speeds
-    if (this.occupant.profile === "wheelchair") this.evacuationSpeed = 18.0;
-    else if (this.occupant.profile === "child") this.evacuationSpeed = 16.0;
-    else if (this.occupant.profile === "elderly") this.evacuationSpeed = 14.0;
-    else if (this.occupant.profile === "temporary_injury") this.evacuationSpeed = 12.0;
-    else if (this.occupant.profile === "first_responder") this.evacuationSpeed = 24.0;
-    else this.evacuationSpeed = 22.0; // Normal adult brisk run
+    // Evacuation animation disabled. Occupants remain stationary.
+    // Route lines are rendered separately by RouteVisual3D.
+    console.log("[Occupant] startEvacuation (disabled):", this.occupant.id);
   }
 
   /**
@@ -473,9 +450,6 @@ export class OccupantVisual3D {
 
   public stopEvacuation() {
     this.isEvacuating = false;
-    this.evacuationCurve = null;
-    this.evacuationProgress = 0;
-    this.hasBeenRescued = false;
     this.group.scale.set(1, 1, 1);
     this.group.position.copy(this.initialPosition);
     this.group.rotation.set(0, 0, 0);
@@ -499,47 +473,8 @@ export class OccupantVisual3D {
   }
 
   public update(delta: number, elapsed: number) {
-    // ── EVACUATION LOCOMOTION ──
-    if (this.isEvacuating && this.evacuationCurve) {
-      this.evacuationProgress += delta * this.evacuationSpeed;
-
-      const totalLength = this.evacuationCurve.getLength();
-      const normalizedProgress = Math.min(this.evacuationProgress / totalLength, 1.0);
-
-      if (normalizedProgress >= 1.0) {
-        // Reached exit — hide the occupant
-        this.group.visible = false;
-        return;
-      }
-
-      const point = this.evacuationCurve.getPointAt(normalizedProgress);
-      const tangent = this.evacuationCurve.getTangentAt(normalizedProgress);
-
-      // Apply lane offset perpendicular to movement direction
-      const lateral = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-      const offset = lateral.multiplyScalar(this.laneOffset);
-
-      this.group.position.set(point.x + offset.x, point.y, point.z + offset.z);
-
-      // Face movement direction
-      this.group.rotation.y = Math.atan2(tangent.x, tangent.z);
-
-      // ── RUNNING ANIMATION ──
-      const runCycle = Math.sin(elapsed * 12 + this.timeOffset) * 0.5;
-      if (this.leftLeg && this.rightLeg) {
-        this.leftLeg.rotation.x = runCycle * 0.7;
-        this.rightLeg.rotation.x = -runCycle * 0.7;
-      }
-      if (this.leftArm && this.rightArm) {
-        this.leftArm.rotation.x = -runCycle * 0.5;
-        this.rightArm.rotation.x = runCycle * 0.5;
-      }
-      this.avatarMesh.position.y = Math.abs(runCycle) * 0.04;
-
-      return;
-    }
-
-    // ── IDLE STATE ──
+    // Occupants remain stationary at their initial positions.
+    // Evacuation animation is disabled — only route lines are shown.
     this.group.position.copy(this.initialPosition);
     this.group.visible = true;
 

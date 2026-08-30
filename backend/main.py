@@ -62,13 +62,12 @@ from routing.dijkstra import (
 
 from routing.graph import (
     build_graph,
-    load_json,
 )
 
 from routing.building_store import (
     get_active_building,
+    set_active_building,
 )
-
 from routing.safety import (
     evaluate_sensor_state,
 )
@@ -486,70 +485,117 @@ def get_building(
         get_current_user
     ),
 ):
-    """Return the currently active building (nodes + edges)."""
-    active = get_active_building()
+    print(">>> GET /api/v1/building HIT")
 
-    if active is not None:
-        nodes = active.get("nodes", [])
-        edges = active.get("edges", [])
-        # Safety net: if edges are missing, infer them
-        if len(edges) < len(nodes) - 1 and nodes:
-            from .building_service import _infer_edges_from_nodes
-            inferred = _infer_edges_from_nodes(nodes)
-            existing = {
-                tuple(sorted([e["from"], e["to"]]))
-                for e in edges
+    graph = build_graph()
+
+    nodes = []
+
+    for node_id, data in graph.nodes(
+        data=True
+    ):
+        nodes.append(
+            {
+                "id": node_id,
+                "x": data.get(
+                    "x",
+                    0,
+                ),
+                "y": data.get(
+                    "y",
+                    0,
+                ),
+                "type": data.get(
+                    "type",
+                    "node",
+                ),
+                "floor": data.get(
+                    "floor",
+                    1,
+                ),
+                "label": data.get(
+                    "label",
+                    node_id,
+                ),
             }
-            for ie in inferred:
-                key = tuple(sorted([ie["from"], ie["to"]]))
-                if key not in existing:
-                    edges.append(ie)
-                    existing.add(key)
-        return {
-            "nodes": nodes,
-            "edges": edges,
-        }
+        )
 
-    # Fallback: load demo building
-    demo = load_json("demo_building.json")
+    edges = []
+
+    for u, v, data in graph.edges(
+        data=True
+    ):
+        edges.append(
+            {
+                "from": u,
+                "to": v,
+                "weight": data.get(
+                    "weight",
+                    1,
+                ),
+                "type": data.get(
+                    "type",
+                    "corridor",
+                ),
+                "accessible": data.get(
+                    "accessible",
+                    True,
+                ),
+            }
+        )
+
+    print(
+        ">>> RETURNING BUILDING:",
+        len(nodes),
+        "nodes,",
+        len(edges),
+        "edges",
+    )
+
     return {
-        "nodes": demo.get("nodes", []),
-        "edges": demo.get("edges", []),
+        "nodes": nodes,
+        "edges": edges,
     }
 
-
-# =========================================================
-# BUILDING DATASET
-# =========================================================
-
-@app.post(
-    "/api/v1/building"
-)
-def upload_building(
+@app.post("/api/v1/building")
+def save_building(
     dataset: BuildingDataset,
     current_user: User = Depends(
         get_current_user
     ),
     db: Session = Depends(get_db),
 ):
-
     try:
 
+        # Activate this building for routing
         validation = activate_building(
             dataset
         )
 
-        # Convert Pydantic dataset to JSON
-        try:
-            building_data = dataset.model_dump(
-                mode="json"
-            )
-        except AttributeError:
-            building_data = dataset.dict()
+        # Use the activated building data (which includes
+        # inferred edges) so the DB stores a complete graph.
+        from routing.building_store import (
+            get_active_building,
+        )
+        building_data = (
+            get_active_building()
+            or dataset.model_dump(mode="json")
+        )
 
+        # Save building for the current user
         saved_building = SavedBuilding(
             user_id=current_user.id,
-            name="Uploaded Building",
+            name=(
+                dataset.building.get(
+                    "name",
+                    "Untitled Building",
+                )
+                if isinstance(
+                    dataset.building,
+                    dict,
+                )
+                else "Untitled Building"
+            ),
             building_json=json.dumps(
                 building_data
             ),
@@ -562,122 +608,12 @@ def upload_building(
         return {
             "success": True,
             "message": (
-                "Building dataset "
-                "loaded and saved successfully."
+                "Building saved and activated "
+                "successfully."
             ),
-            "building_id": saved_building.id,
-            "building": dataset.building,
+            "building": building_data,
             "validation": validation,
-        }
-
-    except ValueError as error:
-
-        return {
-            "success": False,
-            "message": str(error),
-        }
-
-
-# =========================================================
-# USER BUILDINGS
-# =========================================================
-
-@app.get("/api/v1/buildings")
-def get_my_buildings(
-    current_user: User = Depends(
-        get_current_user
-    ),
-    db: Session = Depends(get_db),
-):
-    buildings = (
-        db.query(SavedBuilding)
-        .filter(
-            SavedBuilding.user_id
-            == current_user.id
-        )
-        .order_by(
-            SavedBuilding.created_at.desc()
-        )
-        .all()
-    )
-
-    return [
-        {
-            "id": building.id,
-            "name": building.name,
-            "created_at": building.created_at,
-        }
-        for building in buildings
-    ]
-
-
-@app.post(
-    "/api/v1/building/upload"
-)
-async def upload_building_file(
-    file: UploadFile = File(...),
-    current_user: User = Depends(
-        get_current_user
-    ),
-    db: Session = Depends(get_db),
-):
-
-    if not file.filename:
-        return {
-            "success": False,
-            "message": (
-                "File name is required."
-            ),
-        }
-
-    if not file.filename.lower().endswith(
-        ".json"
-    ):
-        return {
-            "success": False,
-            "message": (
-                "Only JSON building datasets "
-                "are supported."
-            ),
-        }
-
-    try:
-
-        content = await file.read()
-
-        raw_data = json.loads(
-            content.decode("utf-8")
-        )
-
-        dataset = BuildingDataset(
-            **raw_data
-        )
-
-        validation = activate_building(
-            dataset
-        )
-
-        saved_building = SavedBuilding(
-            user_id=current_user.id,
-            name=file.filename,
-            building_json=json.dumps(
-                raw_data
-            ),
-        )
-
-        db.add(saved_building)
-        db.commit()
-        db.refresh(saved_building)
-
-        return {
-            "success": True,
-            "message": (
-                "Building dataset "
-                "uploaded and saved successfully."
-            ),
-            "building_id": saved_building.id,
-            "building": dataset.building,
-            "validation": validation,
+            "saved_building_id": saved_building.id,
         }
 
     except Exception as error:
@@ -688,7 +624,6 @@ async def upload_building_file(
             "success": False,
             "message": str(error),
         }
-
 # =========================================================
 # EVACUATION CALCULATION
 # =========================================================
@@ -740,13 +675,20 @@ def calculate_evacuation(
     # Calculate evacuation route
     # -----------------------------------------------------
 
+    # -----------------------------------------------------
+# Calculate evacuation route
+# -----------------------------------------------------
+
     route = find_evacuation_route(
         start=start,
         destination=destination,
         mobility=mobility,
         blocked_nodes=blocked_nodes,
         occupancy=occupancy,
-    )
+        sensors=sensors,
+   
+)
+    
 
     selected_exit = route.get(
         "exit",

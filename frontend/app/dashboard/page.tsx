@@ -36,6 +36,8 @@ const BACKEND_HTTP =
 
 const CUSTOM_BUILDING_STORAGE_KEY =
   "s33-custom-building";
+const CUSTOM_BUILDING_DATASET_KEY =
+  "s33-custom-building-dataset";
 
 type SimulationHistoryItem = {
   id: number;
@@ -101,6 +103,17 @@ export default function DashboardPage() {
 
   const [simulationRunning, setSimulationRunning] =
     useState<boolean>(false);
+
+  // Simulation phase state machine
+  type SimulationPhase =
+    | "idle"
+    | "hazard_appearing"
+    | "hazard_active"
+    | "calculating_routes"
+    | "evacuating"
+    | "completed";
+  const [simulationPhase, setSimulationPhase] =
+    useState<SimulationPhase>("idle");
 
   const [customBuilding, setCustomBuilding] =
     useState<BuildingDefinition | null>(null);
@@ -482,8 +495,17 @@ console.log("AI PARSE RAW RESPONSE:", rawText);
         }
       );
 
-      const result =
-        await response.json();
+     const result = await response.json();
+
+console.log(
+  `[Sim] RAW BACKEND ROUTE RESPONSE for ${startNodeId}:`,
+  JSON.stringify(result, null, 2)
+);
+
+console.log(
+  "[Sim] RESPONSE KEYS:",
+  Object.keys(result || {})
+);
 
       if (!response.ok) {
         throw new Error(
@@ -493,11 +515,22 @@ console.log("AI PARSE RAW RESPONSE:", rawText);
         );
       }
 
-      const routeIds: string[] =
-        Array.isArray(result?.route)
-          ? result.route
-          : [];
-
+    const routeIds: string[] =
+  Array.isArray(result?.route)
+    ? result.route
+    : Array.isArray(result?.path)
+    ? result.path
+    : Array.isArray(result?.nodes)
+    ? result.nodes
+    : Array.isArray(result?.route?.path)
+    ? result.route.path
+    : [];
+console.log(
+  "[Sim] Extracted route IDs for",
+  startNodeId,
+  ":",
+  routeIds
+);
       if (routeIds.length < 2) {
         setMessage(
           result?.message ||
@@ -578,6 +611,7 @@ console.log("AI PARSE RAW RESPONSE:", rawText);
               ? "static_fallback"
               : "live_sensors",
           isRerouted: false,
+          blockedNodes: Array.isArray(result?.blocked_nodes) ? result.blocked_nodes : [],
         },
       ];
     } catch (error) {
@@ -921,284 +955,245 @@ const handleSimulation = useCallback(() => {
         }, 2000);
 
       return;
-    }
-
-    // -------------------------------------------------------
+    }    // -------------------------------------------------------
     // BUILDING 4 / AI BUILDING
     // Use backend graph + backend routing.
+    // State machine: idle → hazard_appearing → hazard_active
+    //   → calculating_routes → evacuating
     // -------------------------------------------------------
 
     void (async () => {
       try {
+        // Ensure the custom building is active on the backend.
+        // After a server restart the in-memory store is lost,
+        // so we re-activate from the dataset saved in localStorage.
+        const storedDataset = localStorage.getItem(
+          CUSTOM_BUILDING_DATASET_KEY
+        );
+        if (storedDataset) {
+          try {
+            const token = localStorage.getItem("s33_access_token") || localStorage.getItem("s33-token");
+            const ds = JSON.parse(storedDataset);
+            await fetch(
+              `${BACKEND_HTTP}/api/v1/building`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify(ds),
+              }
+            );
+            console.log("[Sim] Re-activated custom building on backend");
+          } catch (e) {
+            console.warn("[Sim] Failed to re-activate building:", e);
+          }
+        }
+
         const data =
           backendBuilding ||
           (await loadBackendBuilding());
 
         if (!data) {
-          setMessage(
-            "Unable to load the uploaded building."
-          );
-
-          setSimulationRunning(
-            false
-          );
-
+          setMessage("Unable to load the uploaded building.");
+          setSimulationRunning(false);
           return;
         }
 
-        const backendFloors =
-          buildBackendFloorsFromGraph(
-            data
-          );
+        const backendFloors = buildBackendFloorsFromGraph(data);
 
-        if (
-          backendFloors.length ===
-          0
-        ) {
-          throw new Error(
-            "The uploaded building contains no valid floors."
-          );
+        if (backendFloors.length === 0) {
+          throw new Error("The uploaded building contains no valid floors.");
         }
 
-        // ---------------------------------------------------
-        // NORMAL ROUTES BEFORE FIRE
-        // Route each generated occupant through the backend.
-        // ---------------------------------------------------
+        // ── PHASE: hazard_appearing ──
+        // No routes visible yet. Occupants stationary. Fire animating.
+        setSimulationPhase("hazard_appearing");
+        setRoutes([]);  // CRITICAL: No routes during hazard_appearing
+        console.log("[Sim] Phase: hazard_appearing — fire animating, no routes");
 
-        const normalRoutes =
-          await Promise.all(
-            occupants.map(
-              (occupant) =>
-                generateBackendRoute(
-                  occupant.roomId,
-                  occupant.profile,
-                  null,
-                  []
-                )
-            )
-          );
+        // Pick fire location
+        const floorLevels = Array.from(new Set(data.nodes.map((n) => n.floor)));
+        if (floorLevels.length === 0) return;
 
-        // Remap occupantId from roomId to actual occupant.id
-        // so the Three.js scene engine can match routes to occupants
-        const remappedNormalRoutes = normalRoutes.flat().map((route) => {
-          const matchedOccupant = occupants.find(o => o.roomId === route.occupantId);
-          return {
-            ...route,
-            occupantId: matchedOccupant?.id || route.occupantId,
-          };
+        const fireFloorLevel = floorLevels[Math.floor(Math.random() * floorLevels.length)];
+        const roomCandidates = data.nodes.filter(
+          (n) => n.floor === fireFloorLevel && (n.type === "room" || n.type === "lobby")
+        );
+        const fireNode = roomCandidates[Math.floor(Math.random() * roomCandidates.length)]
+          || data.nodes.find((n) => n.floor === fireFloorLevel && n.type !== "exit");
+
+        if (!fireNode) throw new Error("Unable to find a valid fire location.");
+
+        const adaptedFirePos = adaptedBuilding?.positions?.get(fireNode.id);
+        const firePosition = {
+          x: adaptedFirePos?.x ?? (150 + Number(fireNode.x) * 1.45),
+          y: adaptedFirePos?.y ?? (80 + Number(fireNode.y) * 1.15),
+        };
+
+        const autoFire: Hazard = { id: "hazard-fire-auto", type: "fire", position: firePosition, severity: "high" };
+        (autoFire as any).floorLevel = fireFloorLevel;
+
+        const activeHazards = [autoFire];
+        setHazards(activeHazards);
+        setSelectedFloor(fireFloorLevel);
+
+        const updatedFloor = backendFloors.find((f) => f.floorLevel === fireFloorLevel) || backendFloors[0];
+        if (updatedFloor) {
+          setFloor({ ...updatedFloor, hazards: activeHazards });
+        }
+
+        console.log("[Sim] Fire at:", fireNode.id, "on floor", fireFloorLevel, "pos:", firePosition);
+
+        // ── Wait for hazard animation to initialize (1.5s) ──
+        await new Promise<void>((resolve) => {
+          timerRef.current = setTimeout(() => resolve(), 1500);
         });
 
-        setRoutes(
-          remappedNormalRoutes
+        // ── PHASE: hazard_active ──
+        // Fire is visible. Hazard zones active. Still no routes.
+        setSimulationPhase("hazard_active");
+        console.log("[Sim] Phase: hazard_active — fire visible, computing hazard zones");
+
+        // Brief pause for hazard zones to register
+        await new Promise<void>((resolve) => {
+          timerRef.current = setTimeout(() => resolve(), 500);
+        });
+
+        // ── PHASE: calculating_routes ──
+        setSimulationPhase("calculating_routes");
+        console.log("[Sim] Phase: calculating_routes — computing safe evacuation paths");
+
+        // Compute which exits are available (backend proximity blocking)
+        const fireSensors = [
+  {
+    id: "T1",
+    type: "temperature",
+    location: fireNode.id,
+    value: 70,
+    available: true,
+  },
+  {
+    id: "S1",
+    type: "smoke",
+    location: fireNode.id,
+    value: 65,
+    available: true,
+  },
+];
+        console.log("[Sim] Total occupants for routing:", occupants.length);
+        console.log("[Sim] Occupants for routing:", occupants);
+        // ── Calculate hazard-aware routes for ALL occupants ──
+        const rerouted = await Promise.all(
+  occupants.map(async (occ) => {
+    console.log(
+      "[Sim] Generating route for:",
+      occ.id,
+      "room:",
+      occ.roomId
+    );
+
+    const result = await generateBackendRoute(
+      occ.roomId,
+      occ.profile,
+      null,
+      fireSensors
+    );
+
+    console.log(
+      "[Sim] Route result for",
+      occ.id,
+      ":",
+      result
+    );
+
+    return result;
+  })
+);
+
+console.log("[Sim] ALL RAW ROUTE RESULTS:", rerouted);
+
+        // Remap occupantId from roomId to actual occupant.id
+        const remappedReroutes = rerouted.flat().map((route) => {
+          const matched = occupants.find((o) => o.roomId === route.occupantId);
+          return { ...route, occupantId: matched?.id || route.occupantId };
+        });
+
+        // ── Validate routes before rendering ──
+        // Build the set of blocked exits from the backend's
+        // blocked_nodes (returned in each route response).
+        const exitNodeIds = new Set(
+          data.nodes.filter((n) => n.type === "exit").map((n) => n.id)
         );
+        const blockedExitIds = new Set<string>();
+        for (const route of remappedReroutes) {
+          if (route.exitId && route.blockedNodes?.includes(route.exitId)) {
+            blockedExitIds.add(route.exitId);
+          }
+        }
 
-        // ---------------------------------------------------
-        // FIRE ACTIVATION AFTER 2 SECONDS
-        // ---------------------------------------------------
+        // Compute dynamic hazard radius from average edge weight
+        // so it scales with the building's coordinate space.
+        const avgEdgeWeight = data.edges.length > 0
+          ? data.edges.reduce((sum: number, e: any) => sum + (e.weight || 1), 0) / data.edges.length
+          : 5;
+        const HAZARD_RADIUS_RAW = avgEdgeWeight * 3;
 
-        timerRef.current =
-          setTimeout(() => {
-            void (async () => {
-              try {
-                const floorLevels =
-                  Array.from(
-                    new Set(
-                      data.nodes.map(
-                        (node) =>
-                          node.floor
-                      )
-                    )
-                  );
+        // Convert raw hazard radius to adapted canvas coordinates.
+        // The adapter normalises [minX..maxX] → [padding..targetWidth-padding].
+        const TARGET_W = 900;
+        const TARGET_H = 650;
+        const PAD = 80;
+        let adaptedRadius = HAZARD_RADIUS_RAW;
+        if (adaptedBuilding?.bounds) {
+          const { minX, minY, maxX, maxY } = adaptedBuilding.bounds;
+          const scaleX = maxX > minX ? (TARGET_W - 2 * PAD) / (maxX - minX) : 1;
+          const scaleY = maxY > minY ? (TARGET_H - 2 * PAD) / (maxY - minY) : 1;
+          adaptedRadius = HAZARD_RADIUS_RAW * (scaleX + scaleY) / 2;
+        }
 
-                if (
-                  floorLevels.length ===
-                  0
-                ) {
-                  return;
-                }
+        const validatedRoutes = remappedReroutes.filter((route) => {
+          // Rule 1: Route must exist with at least 2 points
+          if (!route.path || route.path.length < 2) {
+            console.warn("[Sim] Route validation FAIL: no valid path for", route.occupantId);
+            return false;
+          }
+          // Rule 2: Route must end at an available exit
+          if (blockedExitIds.has(route.exitId)) {
+            console.warn("[Sim] Route validation FAIL: exit blocked for", route.occupantId, "→", route.exitId);
+            return false;
+          }
+          // Rule 3: Route must not pass through hazard zone (check each path point)
+          // Path points are in adapted canvas coords; firePosition is also
+          // in adapted coords, so compare directly using the scaled radius.
+          for (const pt of route.path) {
+            const px = pt.x || 0;
+            const py = pt.y || 0;
+            const dx = px - firePosition.x;
+            const dy = py - firePosition.y;
+            if (Math.hypot(dx, dy) < adaptedRadius * 0.8) {
+              console.warn("[Sim] Route validation FAIL: path enters hazard zone for", route.occupantId);
+              return false;
+            }
+          }
+          return true;
+        });
 
-                const fireFloorLevel =
-                  floorLevels[
-                    Math.floor(
-                      Math.random() *
-                        floorLevels.length
-                    )
-                  ];
+        console.log("[Sim] Validated routes:", validatedRoutes.length, "/", remappedReroutes.length, "total");
+        console.log("[Sim] Blocked exits:", Array.from(blockedExitIds));
+        console.log("[Sim] Available exits:", Array.from(exitNodeIds).filter((id) => !blockedExitIds.has(id)));
 
-                // Pick a real ROOM node on that
-                // floor so the backend knows exactly
-                // where the hazard is.
-                const roomCandidates =
-                  data.nodes.filter(
-                    (node) =>
-                      node.floor ===
-                        fireFloorLevel &&
-                      (
-                        node.type ===
-                          "room" ||
-                        node.type ===
-                          "lobby"
-                      )
-                  );
-
-                const fireNode =
-                  roomCandidates[
-                    Math.floor(
-                      Math.random() *
-                        roomCandidates.length
-                    )
-                  ] ||
-                  data.nodes.find(
-                    (node) =>
-                      node.floor ===
-                      fireFloorLevel &&
-                      node.type !==
-                        "exit"
-                  );
-
-                if (!fireNode) {
-                  throw new Error(
-                    "Unable to find a valid fire location."
-                  );
-                }
-
-                // Use adapted positions if available
-                const adaptedFirePos =
-                  adaptedBuilding?.positions?.get(
-                    fireNode.id
-                  );
-                const firePosition = {
-                  x:
-                    adaptedFirePos?.x ??
-                    (150 + Number(fireNode.x) * 1.45),
-                  y:
-                    adaptedFirePos?.y ??
-                    (80 + Number(fireNode.y) * 1.15),
-                };
-
-                const autoFire: Hazard = {
-                  id:
-                    "hazard-fire-auto",
-                  type: "fire",
-                  position:
-                    firePosition,
-                  severity: "high",
-                };
-
-                (
-                  autoFire as any
-                ).floorLevel =
-                  fireFloorLevel;
-
-                const activeHazards = [
-                  autoFire,
-                ];
-
-                setHazards(
-                  activeHazards
-                );
-
-                setSelectedFloor(
-                  fireFloorLevel
-                );
-
-                const updatedFloor =
-                  backendFloors.find(
-                    (floor) =>
-                      floor.floorLevel ===
-                      fireFloorLevel
-                  ) ||
-                  backendFloors[0];
-
-                if (updatedFloor) {
-                  setFloor(
-                    {
-                      ...updatedFloor,
-                      hazards:
-                        activeHazards,
-                    }
-                  );
-                }
-
-                // ------------------------------------------------
-                // Recalculate every occupant's route through
-                // the backend using fire/smoke sensor data.
-                // ------------------------------------------------
-
-                const fireSensors = [
-                  {
-                    id: "T1",
-                    type:
-                      "temperature",
-                    location:
-                      fireNode.id,
-                    value: 85,
-                    available: true,
-                  },
-                  {
-                    id: "S1",
-                    type: "smoke",
-                    location:
-                      fireNode.id,
-                    value: 90,
-                    available: true,
-                  },
-                ];
-
-                const rerouted =
-                  await Promise.all(
-                    occupants.map(
-                      (occupant) =>
-                        generateBackendRoute(
-                          occupant.roomId,
-                          occupant.profile,
-                          null,
-                          fireSensors
-                        )
-                    )
-                  );
-
-                // Remap occupantId from roomId to actual occupant.id
-                const remappedReroutes = rerouted.flat().map((route) => {
-                  const matchedOccupant = occupants.find(o => o.roomId === route.occupantId);
-                  return {
-                    ...route,
-                    occupantId: matchedOccupant?.id || route.occupantId,
-                  };
-                });
-
-                setRoutes(
-                  remappedReroutes
-                );
-              } catch (error) {
-                console.error(
-                  "Custom building simulation error:",
-                  error
-                );
-
-                setMessage(
-                  error instanceof Error
-                    ? error.message
-                    : "Unable to run the uploaded-building simulation."
-                );
-              }
-            })();
-          }, 2000);
+        // ── PHASE: evacuating ──
+        // Routes validated. Render them. Occupants start moving.
+        setSimulationPhase("evacuating");
+        setRoutes(validatedRoutes);
+        console.log("[Sim] Phase: evacuating —", validatedRoutes.length, "safe routes active");
       } catch (error) {
-        console.error(
-          "Custom building simulation setup error:",
-          error
-        );
-
-        setMessage(
-          error instanceof Error
-            ? error.message
-            : "Unable to start simulation."
-        );
-
-        setSimulationRunning(
-          false
-        );
+        console.error("Custom building simulation error:", error);
+        setMessage(error instanceof Error ? error.message : "Unable to run simulation.");
+        setSimulationRunning(false);
+        setSimulationPhase("idle");
       }
     })();
 
@@ -1209,12 +1204,12 @@ const handleSimulation = useCallback(() => {
   // STOP SIMULATION
   // =========================================================
 
-  setSimulationRunning(
-    false
-  );
-
+  setSimulationRunning(false);
+  setSimulationPhase("idle");
   setHazards([]);
   setMessage("");
+  setRoutes([]);  // Clear all routes immediately on stop
+  console.log("[Sim] Phase: idle — simulation stopped");
 
   // Uploaded / AI building returns to backend-generated
   // normal routes.

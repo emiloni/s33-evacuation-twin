@@ -108,6 +108,7 @@ def find_evacuation_route(
     mobility="normal",
     blocked_nodes=None,
     occupancy=None,
+    sensors=None,
 ):
     """
     If destination is supplied:
@@ -122,6 +123,8 @@ def find_evacuation_route(
         blocked_nodes or set()
     )
 
+    sensors = sensors or []
+
     if destination:
         return find_route(
             start=start,
@@ -135,25 +138,5 @@ def find_evacuation_route(
         mobility=mobility,
         blocked_nodes=blocked_nodes,
         occupancy=occupancy,
-    )
-
-
-if __name__ == "__main__":
-
-    print("\n3-Floor Normal User:")
-
-    print(
-        find_evacuation_route(
-            start="F3_N1",
-            mobility="normal",
-        )
-    )
-
-    print("\n3-Floor Wheelchair User:")
-
-    print(
-        find_evacuation_route(
-            start="F3_N1",
-            mobility="wheelchair",
-        )
+        sensors=sensors,
     )

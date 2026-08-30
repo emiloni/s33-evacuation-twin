@@ -261,6 +261,81 @@ def detect_hazards(
                 sensor_id
             )
 
+    # --------------------------------------------------
+    # HAZARD PROXIMITY: Block exits that are direct
+    # neighbors of the fire location.
+    #
+    # Previously this used a fixed radius that blocked
+    # too many nodes in AI-generated buildings (pixel
+    # coordinates).  Now we only block exits that are
+    # directly connected to the fire node by an edge.
+    # --------------------------------------------------
+
+    try:
+        from routing.graph import build_graph
+        import math
+
+        graph = build_graph()
+
+        # Find fire/flood locations in raw graph coordinates
+        fire_locations = []
+        for h in hazard_map.values():
+            if h["type"] in ("fire", "flood"):
+                fire_locations.append(h["location"])
+
+        if fire_locations:
+            # Build a dynamic exclusion radius from the
+            # average edge weight so it scales with the
+            # building's coordinate space.
+            weights = [
+                d.get("weight", 1)
+                for _, _, d in graph.edges(data=True)
+            ]
+            avg_weight = (
+                sum(weights) / len(weights)
+                if weights
+                else 5.0
+            )
+            HAZARD_EXCLUSION_RADIUS = avg_weight * 3
+
+            for fire_node in fire_locations:
+                fire_data = graph.nodes.get(fire_node, {})
+                fx = fire_data.get("x", 0)
+                fy = fire_data.get("y", 0)
+
+                # Block exits within the scaled radius of
+                # the fire location.
+                for node_id, node_data in graph.nodes(
+                    data=True
+                ):
+                    if node_data.get("type") != "exit":
+                        continue
+                    nx_pos = node_data.get("x", 0)
+                    ny_pos = node_data.get("y", 0)
+                    dist = math.hypot(
+                        nx_pos - fx, ny_pos - fy
+                    )
+                    if dist <= HAZARD_EXCLUSION_RADIUS:
+                        blocked_nodes.add(node_id)
+                        key_h = (
+                            "blocked_exit", node_id
+                        )
+                        if key_h not in hazard_map:
+                            hazard_map[key_h] = {
+                                "type": (
+                                    "closed_exit"
+                                ),
+                                "location": node_id,
+                                "source_sensors": [
+                                    "proximity_block"
+                                ],
+                                "severity": "high",
+                            }
+                        break
+    except Exception:
+        # If graph is unavailable, skip proximity blocking
+        pass
+
     return {
         "blocked_nodes": blocked_nodes,
         "hazards": list(

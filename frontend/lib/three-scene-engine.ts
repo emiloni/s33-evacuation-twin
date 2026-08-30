@@ -292,6 +292,7 @@ export class DigitalTwin3DScene {
    */
   public setSimulationRunning(running: boolean) {
     this.simulationActive = running;
+    console.log("[Scene] setSimulationRunning:", running);
     if (!running) {
       // Stop all occupant locomotion
       for (const occupant of this.occupantsMap.values()) {
@@ -396,8 +397,11 @@ export class DigitalTwin3DScene {
     this.routesMap.clear();
     this.currentRoutesMap.clear();
 
+    // Debug logging
     if (routes && routes.length > 0) {
+      console.log("[Scene] updateRoutes:", routes.length, "routes, simulationActive:", this.simulationActive);
       routes.forEach((route, index) => {
+        console.log("  Route", index, ":", route.occupantId, "→ exit:", route.exitId, "points:", route.path.length, "isRerouted:", route.isRerouted);
         this.currentRoutesMap.set(route.occupantId, route);
         const visual = new RouteVisual3D(route, this.config);
         this.scene.add(visual.group);
@@ -412,6 +416,7 @@ export class DigitalTwin3DScene {
         }
       });
     } else {
+      console.log("[Scene] updateRoutes: cleared all routes");
       // Simulation stopped: Return all occupants safely to initial positions
       for (const occupantVisual of this.occupantsMap.values()) {
         occupantVisual.stopEvacuation();
