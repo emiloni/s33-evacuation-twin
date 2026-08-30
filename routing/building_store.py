@@ -40,10 +40,45 @@ def get_active_building() -> Optional[Dict[str, Any]]:
                 _active_building = json.loads(
                     latest.building_json
                 )
+                # If the stored building has sparse edges
+                # (e.g. old saves before edge inference),
+                # infer missing edges from node positions.
+                stored_edges = _active_building.get("edges", [])
+                stored_nodes = _active_building.get("nodes", [])
+                if (
+                    len(stored_edges)
+                    < len(stored_nodes) - 1
+                    and stored_nodes
+                ):
+                    try:
+                        from backend.building_service import (
+                            _infer_edges_from_nodes,
+                        )
+                        inferred = (
+                            _infer_edges_from_nodes(
+                                stored_nodes
+                            )
+                        )
+                        existing = {
+                            tuple(sorted([e["from"], e["to"]]))
+                            for e in stored_edges
+                        }
+                        for ie in inferred:
+                            key = tuple(sorted(
+                                [ie["from"], ie["to"]]
+                            ))
+                            if key not in existing:
+                                stored_edges.append(ie)
+                                existing.add(key)
+                        _active_building["edges"] = stored_edges
+                    except Exception:
+                        pass
                 print(
                     "[building_store] Auto-loaded building"
                     f" from DB: id={latest.id}"
                     f" name={latest.name}"
+                    f" nodes={len(stored_nodes)}"
+                    f" edges={len(_active_building.get('edges', []))}"
                 )
         except Exception as e:
             print(

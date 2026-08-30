@@ -891,8 +891,14 @@ async def ai_parse_floorplan(
             dataset
         )
 
-        building_data = dataset.model_dump(
-            mode="json"
+        # Use the activated building data (which includes
+        # inferred edges) so the DB stores a complete graph.
+        from routing.building_store import (
+            get_active_building,
+        )
+        building_data = (
+            get_active_building()
+            or dataset.model_dump(mode="json")
         )
 
         saved_building = SavedBuilding(

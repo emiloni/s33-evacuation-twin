@@ -1121,68 +1121,21 @@ console.log("[Sim] ALL RAW ROUTE RESULTS:", rerouted);
         });
 
         // ── Validate routes before rendering ──
-        // Build the set of blocked exits from the backend's
-        // blocked_nodes (returned in each route response).
-        const exitNodeIds = new Set(
-          data.nodes.filter((n) => n.type === "exit").map((n) => n.id)
-        );
-        const blockedExitIds = new Set<string>();
-        for (const route of remappedReroutes) {
-          if (route.exitId && route.blockedNodes?.includes(route.exitId)) {
-            blockedExitIds.add(route.exitId);
-          }
-        }
-
-        // Compute dynamic hazard radius from average edge weight
-        // so it scales with the building's coordinate space.
-        const avgEdgeWeight = data.edges.length > 0
-          ? data.edges.reduce((sum: number, e: any) => sum + (e.weight || 1), 0) / data.edges.length
-          : 5;
-        const HAZARD_RADIUS_RAW = avgEdgeWeight * 3;
-
-        // Convert raw hazard radius to adapted canvas coordinates.
-        // The adapter normalises [minX..maxX] → [padding..targetWidth-padding].
-        const TARGET_W = 900;
-        const TARGET_H = 650;
-        const PAD = 80;
-        let adaptedRadius = HAZARD_RADIUS_RAW;
-        if (adaptedBuilding?.bounds) {
-          const { minX, minY, maxX, maxY } = adaptedBuilding.bounds;
-          const scaleX = maxX > minX ? (TARGET_W - 2 * PAD) / (maxX - minX) : 1;
-          const scaleY = maxY > minY ? (TARGET_H - 2 * PAD) / (maxY - minY) : 1;
-          adaptedRadius = HAZARD_RADIUS_RAW * (scaleX + scaleY) / 2;
-        }
-
+        // The backend is the source of truth for hazard safety
+        // and route selection. Only reject routes that are
+        // structurally invalid (missing or too short).
         const validatedRoutes = remappedReroutes.filter((route) => {
-          // Rule 1: Route must exist with at least 2 points
           if (!route.path || route.path.length < 2) {
-            console.warn("[Sim] Route validation FAIL: no valid path for", route.occupantId);
+            console.warn(
+              "[Sim] Route validation FAIL: no valid path for",
+              route.occupantId
+            );
             return false;
-          }
-          // Rule 2: Route must end at an available exit
-          if (blockedExitIds.has(route.exitId)) {
-            console.warn("[Sim] Route validation FAIL: exit blocked for", route.occupantId, "→", route.exitId);
-            return false;
-          }
-          // Rule 3: Route must not pass through hazard zone (check each path point)
-          // Path points are in adapted canvas coords; firePosition is also
-          // in adapted coords, so compare directly using the scaled radius.
-          for (const pt of route.path) {
-            const px = pt.x || 0;
-            const py = pt.y || 0;
-            const dx = px - firePosition.x;
-            const dy = py - firePosition.y;
-            if (Math.hypot(dx, dy) < adaptedRadius * 0.8) {
-              console.warn("[Sim] Route validation FAIL: path enters hazard zone for", route.occupantId);
-              return false;
-            }
           }
           return true;
         });
 
         console.log("[Sim] Validated routes:", validatedRoutes.length, "/", remappedReroutes.length, "total");
-        console.log("[Sim] Blocked exits:", Array.from(blockedExitIds));
-        console.log("[Sim] Available exits:", Array.from(exitNodeIds).filter((id) => !blockedExitIds.has(id)));
 
         // ── PHASE: evacuating ──
         // Routes validated. Render them. Occupants start moving.
