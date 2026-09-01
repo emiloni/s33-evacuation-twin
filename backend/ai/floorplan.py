@@ -36,6 +36,7 @@ IMPORTANT:
 - Detect doors/openings connecting rooms and corridors.
 - Detect staircases and elevators.
 - Detect emergency exits.
+- Detect RAMP elements as a distinct type (see RAMP DETECTION below).
 - Detect walls only when needed to understand connectivity.
 - Coordinates must use the original image coordinate system:
   x increases from left to right.
@@ -53,6 +54,31 @@ You MUST:
 2. For each door, add the x,y pixel coordinates to the edge connecting the two spaces.
 3. Doors appear as openings in walls between rooms and corridors.
 4. Place door coordinates AT the wall opening, NOT at room centers.
+
+RAMP DETECTION:
+If the floor plan contains a clearly labelled RAMP (e.g. text "RAMP",
+"Accessible Ramp", or a sloped rectangular area), you MUST:
+1. Create a node with type "ramp".
+2. Give it a unique ID like "F1_RAMP_MAIN" or "F1_RAMP_1".
+3. Set accessible=true.
+4. Place the node at the ramp's CENTER coordinates (x, y).
+5. Include a "vertices" array with the 4 corner coordinates of the
+   visible ramp area. For a rectangular ramp:
+   vertices = [
+     {x: left, y: top},
+     {x: right, y: top},
+     {x: right, y: bottom},
+     {x: left, y: bottom}
+   ]
+   The vertices MUST represent the actual visible boundary of the ramp.
+6. Connect it to the nearest corridor node with an edge of type "ramp".
+7. Include it in the analysis.ramps_detected count.
+
+A ramp is an accessible navigation element (sloped surface for wheelchair
+access). It must NOT be classified as a room, corridor, stairs, or exit.
+
+The vertices are CRITICAL for frontend 3D rendering. Without vertices,
+the ramp cannot be displayed as a visible sloped surface.
 
 Return ONLY valid JSON.
 Do not use markdown.
@@ -74,6 +100,21 @@ Return exactly this structure:
       "type": "room",
       "floor": 1,
       "label": "Room 101"
+    },
+    {
+      "id": "F1_RAMP_MAIN",
+      "x": 500,
+      "y": 300,
+      "type": "ramp",
+      "floor": 1,
+      "label": "Accessible Ramp",
+      "accessible": true,
+      "vertices": [
+        {"x": 450, "y": 280},
+        {"x": 550, "y": 280},
+        {"x": 550, "y": 340},
+        {"x": 450, "y": 340}
+      ]
     }
   ],
   "edges": [
@@ -92,6 +133,7 @@ Return exactly this structure:
     "doors_detected": 0,
     "stairs_detected": 0,
     "elevators_detected": 0,
+    "ramps_detected": 0,
     "exits_detected": 0,
     "confidence": "medium",
     "warnings": []
@@ -104,6 +146,7 @@ Allowed node types:
 - corridor
 - stair
 - elevator
+- ramp
 - exit
 - entrance
 - junction
@@ -121,6 +164,12 @@ For stairs:
 For exits:
 - Use type "exit".
 - Label them clearly, for example "Exit Main", "Exit North".
+
+For ramps:
+- Use type "ramp".
+- Label them clearly, for example "Accessible Ramp", "Ramp to Exit".
+- Set accessible=true (ramps are always accessible by design).
+- Connect the ramp to the nearest corridor or navigation node.
 
 Weight should approximate walking distance in image coordinates.
 Accessible should be false only when the connection is clearly not
@@ -311,12 +360,18 @@ def _infer_edges(nodes: list[dict]) -> list[dict]:
         if n.get("type") in ("junction", "entrance")
     ]
 
+    ramps = [
+        n for n in nodes
+        if n.get("type") == "ramp"
+    ]
+
     # All walkable non-exit nodes
     walkable = (
         corridors
         + rooms
         + stairs
         + elevators
+        + ramps
         + junctions
     )
 
@@ -387,10 +442,10 @@ def _infer_edges(nodes: list[dict]) -> list[dict]:
             )
 
     # ---------------------------------------------------------
-    # 3) Connect stairs/elevators to nearest corridor
+    # 3) Connect stairs/elevators/ramps to nearest corridor
     # ---------------------------------------------------------
 
-    for node in stairs + elevators:
+    for node in stairs + elevators + ramps:
 
         same_floor_corridors = [
             c for c in corridors
@@ -616,21 +671,46 @@ def _normalise_graph(
             "room",
         )
 
-        clean_nodes.append(
-            {
-                "id": node_id,
-                "x": x,
-                "y": y,
-                "type": node_type,
-                "floor": floor,
-                "label": str(
-                    node.get(
-                        "label",
-                        node_id,
-                    )
-                ),
-            }
-        )
+        # FORCE-CORRECT: If label or ID contains RAMP, override type
+        label_str = str(node.get("label", "")).lower()
+        id_str = node_id.lower()
+        if "ramp" in label_str or "ramp" in id_str:
+            if node_type != "ramp":
+                print(f"[AI] RAMP CORRECTED: {node_id} type '{node_type}' -> 'ramp' (label: {node.get('label', 'N/A')})")
+            node_type = "ramp"
+
+        clean_node = {
+            "id": node_id,
+            "x": x,
+            "y": y,
+            "type": node_type,
+            "floor": floor,
+            "label": str(
+                node.get(
+                    "label",
+                    node_id,
+                )
+            ),
+        }
+
+        # Preserve vertices for ramp nodes (needed for 3D rendering)
+        if node_type == "ramp":
+            raw_vertices = node.get("vertices", [])
+            if isinstance(raw_vertices, list) and len(raw_vertices) >= 3:
+                clean_vertices = []
+                for v in raw_vertices:
+                    if isinstance(v, dict):
+                        try:
+                            vx = float(v.get("x", 0))
+                            vy = float(v.get("y", 0))
+                            clean_vertices.append({"x": vx, "y": vy})
+                        except (TypeError, ValueError):
+                            pass
+                if len(clean_vertices) >= 3:
+                    clean_node["vertices"] = clean_vertices
+            clean_node["accessible"] = True
+
+        clean_nodes.append(clean_node)
 
     # ---------------------------------------------------------
     # NORMALISE EDGE TYPES
@@ -768,6 +848,16 @@ def _normalise_graph(
         if edge_type == "stairs":
             accessible = False
 
+        # FORCE-CORRECT: If either endpoint is a ramp node,
+        # the edge must be type "ramp" and accessible.
+        source_is_ramp = source_node and source_node.get("type") == "ramp"
+        target_is_ramp = target_node and target_node.get("type") == "ramp"
+        if source_is_ramp or target_is_ramp:
+            if edge_type != "ramp":
+                print(f"[AI] RAMP EDGE CORRECTED: {source} -> {target} type '{edge_type}' -> 'ramp'")
+            edge_type = "ramp"
+            accessible = True
+
         clean_edge = {
             
             "from": source,
@@ -852,6 +942,42 @@ def _normalise_graph(
         "floors": len(floors) or 1,
     }
 
+    # Debug: log ramp detection results
+    ramp_nodes = [n for n in clean_nodes if n["type"] == "ramp"]
+    ramp_edges = [e for e in clean_edges if e["type"] == "ramp"]
+
+    for rn in ramp_nodes:
+        print("[GRAPH] RAMP NODE:")
+        print("  id:", rn["id"])
+        print("  type:", rn["type"])
+        print("  accessible:", rn.get("accessible", "not set"))
+        print("  position: (%s, %s)" % (rn["x"], rn["y"]))
+        print("  label:", rn.get("label", "N/A"))
+        if "vertices" in rn:
+            print("  vertices:", rn["vertices"])
+    for re_edge in ramp_edges:
+        print("[GRAPH] RAMP EDGE:")
+        print("  from:", re_edge["from"], "-> to:", re_edge["to"])
+        print("  type:", re_edge["type"])
+        print("  accessible:", re_edge.get("accessible", "not set"))
+    print("")
+    print("[AI PARSE] Total elements:", len(clean_nodes), "nodes,", len(clean_edges), "edges")
+    print("[AI PARSE] Ramps detected:", len(ramp_nodes))
+    for rn in ramp_nodes:
+        print("[AI PARSE] RAMP FOUND")
+        print("  ID:", rn["id"])
+        print("  Floor:", rn["floor"])
+        print("  Type:", rn["type"])
+        print("  Position: (%s, %s)" % (rn["x"], rn["y"]))
+        print("  Label:", rn.get("label", "N/A"))
+    if ramp_edges:
+        print("[AI PARSE] Ramp edges:", len(ramp_edges))
+        for re_edge in ramp_edges:
+            print("  %s -> %s (type: %s, accessible: %s)" % (
+                re_edge["from"], re_edge["to"],
+                re_edge["type"], re_edge.get("accessible", True)
+            ))
+
     return {
         "building": building_info,
         "nodes": clean_nodes,
@@ -886,6 +1012,15 @@ def _normalise_graph(
                     "elevators_detected",
                     sum(
                         node["type"] == "elevator"
+                        for node in clean_nodes
+                    ),
+                )
+            ),
+            "ramps_detected": int(
+                analysis.get(
+                    "ramps_detected",
+                    sum(
+                        node["type"] == "ramp"
                         for node in clean_nodes
                     ),
                 )

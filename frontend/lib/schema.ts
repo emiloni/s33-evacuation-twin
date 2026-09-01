@@ -87,6 +87,28 @@ export interface FloorGeometry {
   connections: FloorConnection[];
   buildingOutline?: Point[];
   hazards?: Hazard[];
+  ramps?: Ramp[];
+  elevators?: Elevator[];
+}
+
+
+export interface Ramp {
+  id: string;
+  floorLevel: number;
+  position: Point;
+  connects: [string, string];
+  width: number;
+  accessible: boolean;
+  blocked: boolean;
+}
+
+export interface Elevator {
+  id: string;
+  connectsFloors: number[];
+  positionByFloor: { floor: number; x: number; y: number }[];
+  accessible: boolean;
+  blocked: boolean;
+  emergencyApproved: boolean;
 }
 
 export interface Building {

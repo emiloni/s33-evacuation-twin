@@ -424,6 +424,28 @@ export class DigitalTwin3DScene {
     }
   }
 
+  /**
+   * Controls floor visibility.
+   * visibleFloor: number = show only that floor level
+   * visibleFloor: "ALL" = show all floors
+   */
+  public setFloorVisibility(visibleFloor: number | "ALL") {
+    if (!this.floorGroup) return;
+
+    this.floorGroup.traverse((child) => {
+      // FloorLevel_N groups are the direct children of root
+      // Their name format is: FloorLevel_N where N is the floor level
+      if (child.name && child.name.startsWith("FloorLevel_")) {
+        const level = parseInt(child.name.replace("FloorLevel_", ""), 10);
+        child.visible = visibleFloor === "ALL" || level === visibleFloor;
+      }
+      // Vertical stairwell column connects floors — always visible
+      if (child.name === "VerticalStairwellColumn") {
+        child.visible = true;
+      }
+    });
+  }
+
   private updateCameraFromSpherical() {
     this.spherical.radius = THREE.MathUtils.lerp(
       this.spherical.radius,

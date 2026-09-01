@@ -97,9 +97,13 @@ export default function DashboardPage() {
 
   const [selectedFloor, setSelectedFloor] =
     useState<number>(1);
+  const [visibleFloor, setVisibleFloor] =
+    useState<number | "ALL">("ALL");
 
   const [hazards, setHazards] =
     useState<Hazard[]>([]);
+  const [mobilityProfile, setMobilityProfile] =
+    useState<MobilityProfile>("normal");
 
   const [simulationRunning, setSimulationRunning] =
     useState<boolean>(false);
@@ -788,24 +792,28 @@ const handleSelectBuilding = useCallback(
 
   // Handle Floor Level Switch
   const handleSelectFloor = useCallback(
-    (floorNum: number) => {
-      setSelectedFloor(floorNum);
+    (floorNum: number | "ALL") => {
+      if (floorNum === "ALL") {
+        setVisibleFloor("ALL");
+      } else {
+        setVisibleFloor(floorNum);
+        setSelectedFloor(floorNum);
 
-      const newFloor = getFloorGeometry(
-        selectedBuilding,
-        floorNum,
-        hazards
-      );
-
-      setFloor(newFloor);
-
-      setRoutes(
-        getRoutesForSelectedFloor(
+        const newFloor = getFloorGeometry(
           selectedBuilding,
           floorNum,
           hazards
-        )
-      );
+        );
+        setFloor(newFloor);
+
+        setRoutes(
+          getRoutesForSelectedFloor(
+            selectedBuilding,
+            floorNum,
+            hazards
+          )
+        );
+      }
     },
     [
       selectedBuilding,
@@ -930,6 +938,7 @@ const handleSimulation = useCallback(() => {
           setSelectedFloor(
             fireFloorLevel
           );
+          setVisibleFloor(fireFloorLevel);
 
           const updatedFloor =
             getFloorGeometry(
@@ -1038,6 +1047,7 @@ const handleSimulation = useCallback(() => {
         const activeHazards = [autoFire];
         setHazards(activeHazards);
         setSelectedFloor(fireFloorLevel);
+        setVisibleFloor(fireFloorLevel);
 
         const updatedFloor = backendFloors.find((f) => f.floorLevel === fireFloorLevel) || backendFloors[0];
         if (updatedFloor) {
@@ -1534,7 +1544,7 @@ console.log("[Sim] ALL RAW ROUTE RESULTS:", rerouted);
 
   return (
     <DashboardShell
-      selectedFloor={selectedFloor}
+      selectedFloor={visibleFloor}
       onSelectFloor={handleSelectFloor}
       simulationRunning={simulationRunning}
       hazardsCount={hazards.length}
@@ -1576,6 +1586,7 @@ console.log("[Sim] ALL RAW ROUTE RESULTS:", rerouted);
               allFloors={allBuildingFloors}
               simulationRunning={simulationRunning}
               buildingSource={selectedBuilding === CUSTOM_BUILDING_ID ? "ai" : "demo"}
+              visibleFloor={visibleFloor}
               className="h-full w-full flex-1"
             />
           </div>

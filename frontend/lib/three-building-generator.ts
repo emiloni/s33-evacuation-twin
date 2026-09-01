@@ -265,6 +265,13 @@ export function createArchitecturalMaterials() {
       roughness: 0.5,
       metalness: 0.4,
     }),
+    rampMaterial: new THREE.MeshStandardMaterial({
+      color: 0x0ea5e9,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.3,
+      roughness: 0.6,
+      metalness: 0.2,
+    }),
     stairTreadMaterial: new THREE.MeshStandardMaterial({
       color: 0x059669,
       emissive: 0x059669,
@@ -377,14 +384,14 @@ function buildSingleFloorLevel3D(
 
   geometry.rooms.forEach((room) => {
     const isSelected = selectedRoomId === room.id;
-    const roomGroup = buildRoom3D(room, materials, config, isSelected, allCutoutPoints, isActiveFloor);
+    const roomGroup = buildRoom3D(room, materials, config, isSelected, allCutoutPoints, isActiveFloor, geometry.floorLevel);
     rootGroup.add(roomGroup);
   });
 
   // 3. Build Doors
   if (geometry.doors) {
     geometry.doors.forEach((door) => {
-      const doorMesh = buildDoor3D(door, materials, config);
+      const doorMesh = buildDoor3D(door, materials, config, geometry.floorLevel);
       rootGroup.add(doorMesh);
     });
   }
@@ -392,7 +399,7 @@ function buildSingleFloorLevel3D(
   // 4. Build Exit Portals
   if (geometry.exits) {
     geometry.exits.forEach((exit) => {
-      const exitGroup = buildExit3D(exit, materials, config);
+      const exitGroup = buildExit3D(exit, materials, config, geometry.floorLevel);
       rootGroup.add(exitGroup);
     });
   }
@@ -482,6 +489,150 @@ function projectPointOnSegment(
   return { dist: p.distanceTo(proj), t };
 }
 
+
+/**
+ * Builds a 3D sloped ramp representation.
+ * Uses the same toWorldCoords conversion as rooms/corridors.
+ * Creates a visible inclined surface with outline.
+ */
+function buildRamp3D(
+  room: Room,
+  materials: ReturnType<typeof createArchitecturalMaterials>,
+  config: Building3DConfig,
+  floorLevel: number = 1
+): THREE.Group {
+  const group = new THREE.Group();
+  group.name = `Ramp_${room.id}`;
+  group.userData = { type: "ramp", id: room.id, floorLevel, accessible: true, elementType: "ramp" };
+
+  const poly = room.polygon;
+  if (!poly || poly.length < 3) return group;
+
+  // Convert polygon to world coordinates
+  const worldPoints = poly.map((p) => toWorldCoords(p, config));
+
+  // Calculate bounding box in world space
+  const xs = worldPoints.map((p) => p.x);
+  const zs = worldPoints.map((p) => p.z);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minZ = Math.min(...zs);
+  const maxZ = Math.max(...zs);
+  const width = maxX - minX;
+  const depth = maxZ - minZ;
+  const centerX = (minX + maxX) / 2;
+  const centerZ = (minZ + maxZ) / 2;
+
+  // Ramp height (how much it slopes upward)
+  const rampHeight = 0.6;
+
+  console.log("[RAMP] Building 3D ramp:", room.id);
+  console.log("[RAMP]   World bounds: x=[" + minX.toFixed(1) + ", " + maxX.toFixed(1) + "] z=[" + minZ.toFixed(1) + ", " + maxZ.toFixed(1) + "]");
+  console.log("[RAMP]   Dimensions: width=" + width.toFixed(1) + " depth=" + depth.toFixed(1) + " height=" + rampHeight);
+
+  // --- SLOPED SURFACE (the main ramp) ---
+  // Create a custom BufferGeometry with vertices that slope from low to high
+  // along the X axis (left=low, right=high)
+  const rampGeo = new THREE.BufferGeometry();
+  const vertices = new Float32Array([
+    // Triangle 1: bottom-left, bottom-right, top-right
+    minX, 0.03, minZ,        // bottom-left (y=0.03, just above floor)
+    maxX, 0.03, minZ,        // bottom-right
+    maxX, 0.03 + rampHeight, maxZ,  // top-right (sloped up)
+
+    // Triangle 2: bottom-left, top-right, top-left
+    minX, 0.03, minZ,        // bottom-left
+    maxX, 0.03 + rampHeight, maxZ,  // top-right
+    minX, 0.03 + rampHeight, maxZ,  // top-left (sloped up)
+  ]);
+  rampGeo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+  rampGeo.computeVertexNormals();
+
+  const rampMat = new THREE.MeshStandardMaterial({
+    color: 0x0ea5e9,
+    emissive: 0x0284c7,
+    emissiveIntensity: 0.2,
+    roughness: 0.5,
+    metalness: 0.3,
+    side: THREE.DoubleSide,
+  });
+
+  const rampMesh = new THREE.Mesh(rampGeo, rampMat);
+  rampMesh.receiveShadow = true;
+  rampMesh.castShadow = true;
+  rampMesh.userData = { type: "ramp", id: room.id, floorLevel, accessible: true };
+  group.add(rampMesh);
+
+  // --- SIDE WALLS (triangular profile) ---
+  const wallThickness = 0.08;
+
+  // Front side wall (at minZ)
+  const frontWallGeo = new THREE.BufferGeometry();
+  const fwVerts = new Float32Array([
+    minX, 0.03, minZ,
+    maxX, 0.03, minZ,
+    maxX, 0.03 + rampHeight, minZ,
+    minX, 0.03, minZ,
+    maxX, 0.03 + rampHeight, minZ,
+    minX, 0.03 + rampHeight, minZ,
+  ]);
+  frontWallGeo.setAttribute('position', new THREE.BufferAttribute(fwVerts, 3));
+  frontWallGeo.computeVertexNormals();
+  const sideMat = new THREE.MeshStandardMaterial({
+    color: 0x0284c7,
+    transparent: true,
+    opacity: 0.35,
+    roughness: 0.3,
+    side: THREE.DoubleSide,
+  });
+  const frontWall = new THREE.Mesh(frontWallGeo, sideMat);
+  group.add(frontWall);
+
+  // Back side wall (at maxZ)
+  const backWallGeo = new THREE.BufferGeometry();
+  const bwVerts = new Float32Array([
+    minX, 0.03, maxZ,
+    maxX, 0.03, maxZ,
+    maxX, 0.03 + rampHeight, maxZ,
+    minX, 0.03, maxZ,
+    maxX, 0.03 + rampHeight, maxZ,
+    minX, 0.03 + rampHeight, maxZ,
+  ]);
+  backWallGeo.setAttribute('position', new THREE.BufferAttribute(bwVerts, 3));
+  backWallGeo.computeVertexNormals();
+  const backWall = new THREE.Mesh(backWallGeo, sideMat);
+  group.add(backWall);
+
+  // --- OUTLINE EDGES ---
+  const edgesGeo = new THREE.EdgesGeometry(rampGeo);
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0x0284c7, linewidth: 2 });
+  const edgeLines = new THREE.LineSegments(edgesGeo, edgeMat);
+  group.add(edgeLines);
+
+  // --- ACCESSIBILITY SYMBOL (cross-slope stripe marker) ---
+  // Add a visible cross-hatch pattern on the ramp surface for accessibility identification
+  const stripeGeo = new THREE.BufferGeometry();
+  const stripeCount = Math.max(3, Math.floor(width / 1.5));
+  const stripeVerts: number[] = [];
+  for (let i = 0; i < stripeCount; i++) {
+    const t = (i + 0.5) / stripeCount;
+    const sx = minX + t * width;
+    const sy = 0.035 + t * rampHeight;
+    stripeVerts.push(
+      sx - 0.15, sy + 0.005, minZ + 0.3,
+      sx + 0.15, sy + 0.005, maxZ - 0.3,
+    );
+  }
+  stripeGeo.setAttribute('position', new THREE.Float32BufferAttribute(stripeVerts, 3));
+  const stripeMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1, transparent: true, opacity: 0.5 });
+  const stripes = new THREE.LineSegments(stripeGeo, stripeMat);
+  group.add(stripes);
+
+  console.log("[RAMP]   3D ramp mesh created successfully:", room.id);
+
+  return group;
+}
+
 /**
  * Builds a 3D Room representation
  */
@@ -491,14 +642,25 @@ function buildRoom3D(
   config: Building3DConfig,
   isSelected: boolean = false,
   allDoors: Door[] = [],
-  isActiveFloor: boolean = true
+  isActiveFloor: boolean = true,
+  floorLevel: number = 1
 ): THREE.Group {
   const group = new THREE.Group();
   group.name = `Room_${room.id}`;
-  group.userData = { type: "room", roomData: room };
+  group.userData = { type: "room", roomData: room, floorLevel };
 
   const poly = room.polygon;
   if (!poly || poly.length < 3) return group;
+
+  // Detect ramp rooms and delegate to buildRamp3D for sloped geometry
+  const isRampRoom = room.label && room.label.toLowerCase().includes("ramp");
+  if (isRampRoom) {
+    console.log("[RAMP] Room detected as ramp:", room.id, room.label);
+    const rampGroup = buildRamp3D(room, materials, config, floorLevel);
+    // Copy children from rampGroup to this group
+    rampGroup.children.forEach((child) => group.add(child));
+    return group;
+  }
 
   // 1. Room Floor Surface
   const shape = new THREE.Shape();
@@ -516,7 +678,9 @@ function buildRoom3D(
 
   let floorMat = materials.roomFloorOffice;
   if (isSelected) floorMat = materials.roomFloorSelected;
-  else if (room.type === "corridor") floorMat = materials.roomFloorCorridor;
+  else if (room.label && room.label.toLowerCase().includes("ramp")) {
+    floorMat = materials.rampMaterial;
+  } else if (room.type === "corridor") floorMat = materials.roomFloorCorridor;
   else if (room.type === "meeting_room") floorMat = materials.roomFloorMeeting;
 
   if (!isActiveFloor) {
@@ -530,7 +694,7 @@ function buildRoom3D(
   const floorMesh = new THREE.Mesh(floorGeo, floorMat);
   floorMesh.position.y = 0.02;
   floorMesh.receiveShadow = true;
-  floorMesh.userData = { type: "room_floor", roomId: room.id, roomData: room };
+  floorMesh.userData = { type: "room_floor", roomId: room.id, roomData: room, floorLevel };
   group.add(floorMesh);
 
   // 2. Extruded Walls
@@ -547,9 +711,19 @@ if (isCorridor && isAI) {
 
 // Demo buildings: corridors use glass walls (original behavior).
 // This gives corridors visual structure and connected appearance.
-let wallMat: THREE.Material = isCorridor
-  ? materials.wallGlass
-  : materials.wallSolid;
+const isRamp = room.label && room.label.toLowerCase().includes("ramp");
+let wallMat: THREE.Material = isRamp
+  ? new THREE.MeshPhysicalMaterial({
+      color: 0x0ea5e9,
+      transmission: 0.7,
+      opacity: 0.8,
+      transparent: true,
+      roughness: 0.2,
+      ior: 1.4,
+    })
+  : isCorridor
+    ? materials.wallGlass
+    : materials.wallSolid;
 
 if (!isActiveFloor) {
   wallMat = isCorridor
@@ -648,11 +822,12 @@ function createWallSegment(
 function buildDoor3D(
   door: Door,
   materials: ReturnType<typeof createArchitecturalMaterials>,
-  config: Building3DConfig
+  config: Building3DConfig,
+  floorLevel: number = 1
 ): THREE.Group {
   const group = new THREE.Group();
   group.name = `Door_${door.id}`;
-  group.userData = { type: "door", doorData: door };
+  group.userData = { type: "door", doorData: door, floorLevel };
 
   const p = toWorldCoords(door.position, config);
   group.position.set(p.x, 0, p.z);
@@ -720,11 +895,12 @@ function buildDoor3D(
 function buildExit3D(
   exit: ExitPoint,
   materials: ReturnType<typeof createArchitecturalMaterials>,
-  config: Building3DConfig
+  config: Building3DConfig,
+  floorLevel: number = 1
 ): THREE.Group {
   const group = new THREE.Group();
   group.name = `Exit_${exit.id}`;
-  group.userData = { type: "exit", exitData: exit };
+  group.userData = { type: "exit", exitData: exit, floorLevel };
 
   const p = toWorldCoords(exit.position, config);
   group.position.set(p.x, 0, p.z);

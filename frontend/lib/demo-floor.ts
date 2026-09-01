@@ -110,6 +110,18 @@ export const DEMO_FLOOR: FloorGeometry = {
     },
   ],
 
+  ramps: [
+    {
+      id: "ramp-1",
+      floorLevel: 1,
+      position: { x: 500, y: 330 },
+      connects: ["corridor-1", "exit-1"] as [string, string],
+      width: 60,
+      accessible: true,
+      blocked: false,
+    },
+  ],
+
   stairwells: [
     {
       id: "stairs-1",

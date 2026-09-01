@@ -8,8 +8,8 @@ import Icons from "@/lib/icon-set";
 import Link from "next/link";
 
 interface DashboardShellProps {
-  selectedFloor: number;
-  onSelectFloor: (floor: number) => void;
+  selectedFloor: number | "ALL";
+  onSelectFloor: (floor: number | "ALL") => void;
   simulationRunning: boolean;
   hazardsCount?: number;
   buildingName?: string;

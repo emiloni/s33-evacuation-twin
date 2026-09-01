@@ -17,11 +17,22 @@ HAZARD_TYPES = {
     "closed_exit",
 }
 
+# Edge types recognized by the routing system
+EDGE_TYPES = {
+    "corridor",
+    "stairs",
+    "ramp",
+    "elevator",
+    "door",
+}
+
 
 def edge_allowed(
     edge_data: dict,
     mobility: str,
     blocked_nodes: Optional[Set[str]] = None,
+    hazard_type: Optional[str] = None,
+    elevator_emergency_approved: bool = False,
 ) -> bool:
 
     if mobility not in MOBILITY_TYPES:
@@ -30,22 +41,39 @@ def edge_allowed(
         )
 
     blocked_nodes = blocked_nodes or set()
+    edge_type = edge_data.get("type", "corridor")
 
-    # Wheelchair users cannot use stairs.
+    # Elevator safety rule: during fire, elevators are
+    # unavailable unless explicitly approved.
     if (
-        mobility == "wheelchair"
-        and edge_data.get("type") == "stairs"
+        edge_type == "elevator"
+        and hazard_type == "fire"
+        and not elevator_emergency_approved
     ):
         return False
 
-    # Temporary injury avoids stairs.
+    # Blocked elevators are never available
     if (
-        mobility == "temporary_injury"
-        and edge_data.get("type") == "stairs"
+        edge_type == "elevator"
+        and not edge_data.get("accessible", True)
     ):
         return False
 
-    # Accessibility restriction.
+    # Wheelchair users: cannot use stairs, ramps OK
+    if mobility == "wheelchair":
+        if edge_type == "stairs":
+            return False
+        if edge_type == "ramp":
+            return True
+
+    # Temporary injury: avoids stairs, ramps preferred
+    if mobility == "temporary_injury":
+        if edge_type == "stairs":
+            return False
+        if edge_type == "ramp":
+            return True
+
+    # Accessibility restriction
     if not edge_data.get("accessible", True):
         if mobility in {
             "wheelchair",

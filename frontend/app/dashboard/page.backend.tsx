@@ -766,6 +766,8 @@ export default function DashboardPage() {
 
   const [selectedFloor, setSelectedFloor] =
     useState(1);
+  const [visibleFloor, setVisibleFloor] =
+    useState<number | "ALL">("ALL");
 
   const [startNode, setStartNode] =
     useState("");
@@ -1636,10 +1638,13 @@ export default function DashboardPage() {
 
   const handleSelectFloor =
     useCallback(
-      (floorNum: number) => {
-        setSelectedFloor(
-          floorNum
-        );
+      (floorNum: number | "ALL") => {
+        if (floorNum === "ALL") {
+          setVisibleFloor("ALL");
+          return;
+        }
+        setVisibleFloor(floorNum);
+        setSelectedFloor(floorNum);
 
         const floorNode =
           building?.nodes.find(

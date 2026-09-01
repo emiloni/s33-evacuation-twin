@@ -229,6 +229,28 @@ function generateRoomPolygon(
     ];
   }
 
+  if (type === "ramp") {
+    // Use actual vertices from AI parser if available
+    const rawVertices = (node as any).vertices;
+    if (Array.isArray(rawVertices) && rawVertices.length >= 3) {
+      const verts = rawVertices.map((v: any) => ({
+        x: transformNodeToCanvas(v, bounds).x,
+        y: transformNodeToCanvas(v, bounds).y,
+      }));
+      console.log("[BUILDING ADAPTER] Ramp vertices used:", node.id, verts);
+      return verts;
+    }
+    // Fallback: create default ramp polygon centered at detected position
+    const s = 20;
+    console.log("[BUILDING ADAPTER] Ramp fallback polygon:", node.id, "at", center);
+    return [
+      { x: center.x - s, y: center.y - s * 0.5 },
+      { x: center.x + s, y: center.y - s * 0.5 },
+      { x: center.x + s, y: center.y + s * 0.5 },
+      { x: center.x - s, y: center.y + s * 0.5 },
+    ];
+  }
+
   if (type === "corridor" || type === "lobby") {
     const rawNode = rawPositions.get(node.id) || { x: 500, y: 350 };
     const allRaw = Array.from(rawPositions.entries());
@@ -330,6 +352,7 @@ export function adaptBuilding(data: ApiBuilding): AdaptedBuilding {
           "break_room",
           "restroom",
           "office",
+          "ramp",
         ].includes(node.type.toLowerCase())
       )
       .map((node) => {
@@ -343,12 +366,14 @@ export function adaptBuilding(data: ApiBuilding): AdaptedBuilding {
           bounds
         );
 
-        let roomType: RoomType = "office";
         const t = node.type.toLowerCase();
+        if (t === "ramp") console.log("[BUILDING ADAPTER] Processing ramp:", node.id, "at", center);
+        let roomType: RoomType = "office";
         if (t === "corridor") roomType = "corridor";
         else if (t === "lobby") roomType = "lobby";
         else if (t === "meeting_room") roomType = "meeting_room";
         else if (t === "break_room") roomType = "break_room";
+        else if (t === "ramp") roomType = "corridor";
 
         return {
           id: node.id,

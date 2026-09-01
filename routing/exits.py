@@ -112,7 +112,10 @@ def find_best_exit(
         graph,
         blocked_nodes,
     )
-
+    print(
+    "\nAVAILABLE EXITS:",
+    available_exits,
+)
     if not available_exits:
 
         return {
@@ -224,6 +227,12 @@ def find_best_exit(
     best_route = None
     best_distance = None
 
+    print("")
+    print("[Individual Routing]")
+    print("  Occupant start:", start)
+    print("  Mobility:", mobility)
+    print("  Available exits:", available_exits)
+
     for exit_node in available_exits:
 
         if exit_node not in graph:
@@ -239,11 +248,13 @@ def find_best_exit(
             )
 
             distance, route = nx.single_source_dijkstra(
-    graph,
-    start,
-    exit_node,
-    weight="routing_weight",
-)
+                graph,
+                start,
+                exit_node,
+                weight="routing_weight",
+            )
+
+            print("  Candidate Exit:", exit_node, "| Cost:", round(distance, 1), "| Route:", route)
 
             if (
                 best_distance is None
@@ -255,12 +266,14 @@ def find_best_exit(
                 best_distance = distance
 
         except nx.NetworkXNoPath:
-
+            print("  Candidate Exit:", exit_node, "| NO PATH")
             continue
 
         except nx.NodeNotFound:
-
+            print("  Candidate Exit:", exit_node, "| NODE NOT FOUND")
             continue
+
+    print("  Selected Exit:", best_exit, "| Cost:", best_distance)
 
     # ---------------------------------------------------------
     # No reachable exit

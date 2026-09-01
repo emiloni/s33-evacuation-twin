@@ -17,6 +17,7 @@ interface DigitalTwinCanvas3DProps {
   onSelectRoom?: (room: Room | null) => void;
   onSelectOccupant?: (occupant: Occupant | null) => void;
   buildingSource?: "demo" | "ai";
+  visibleFloor?: number | "ALL";
   className?: string;
 }
 
@@ -31,6 +32,7 @@ export default function DigitalTwinCanvas3D({
   onSelectRoom,
   onSelectOccupant,
   buildingSource = "demo",
+  visibleFloor = "ALL",
   className = "",
 }: DigitalTwinCanvas3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -97,6 +99,11 @@ export default function DigitalTwinCanvas3D({
   useEffect(() => {
     sceneEngineRef.current?.setSimulationRunning(simulationRunning);
   }, [simulationRunning]);
+
+  // Synchronize Floor Visibility
+  useEffect(() => {
+    sceneEngineRef.current?.setFloorVisibility(visibleFloor);
+  }, [visibleFloor]);
 
   const handlePresetChange = useCallback((preset: CameraPreset) => {
     setActivePreset(preset);

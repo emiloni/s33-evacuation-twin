@@ -11,6 +11,40 @@ import type {
 const HAZARD_BUFFER = 180;
 const DEFAULT_SPEED = 1.35;
 
+// Graph-based routing cost weights
+const HAZARD_PENALTY = 500;
+
+/**
+ * Returns a mobility-adjusted multiplier for an edge type.
+ * Used to weight corridor path segments differently for different
+ * mobility profiles.
+ */
+function mobilityEdgeCost(
+  edgeType: "corridor" | "ramp" | "stairs" | "elevator" | "door",
+  profile: Occupant["profile"]
+): number {
+  switch (profile) {
+    case "wheelchair":
+      if (edgeType === "stairs") return Infinity;
+      if (edgeType === "ramp") return 0.8;
+      if (edgeType === "elevator") return 0.5;
+      return 1.0;
+    case "temporary_injury":
+      if (edgeType === "stairs") return Infinity;
+      if (edgeType === "ramp") return 0.85;
+      return 1.0;
+    case "elderly":
+      if (edgeType === "stairs") return 1.4;
+      if (edgeType === "ramp") return 0.9;
+      return 1.0;
+    case "child":
+      if (edgeType === "stairs") return 1.1;
+      return 1.0;
+    default:
+      return 1.0;
+  }
+}
+
 // Fallback stair-shaft entry point used only when a floor has no stairwell
 // geometry at all. Matches Building 2/3's existing stairwell placement
 // exactly, so demo-building behavior is unchanged.
@@ -235,31 +269,66 @@ function chooseExit(
   }
 
   const door = findDoor(occupant.roomId, floor, occupant);
-  const doorPos = door ? door.position : occupant.position;
 
-  const ranked = [...accessibleExits].sort((a, b) => {
+  // Compute graph-based route cost for each exit
+  const evaluated = accessibleExits.map((exit) => {
     const dummyDoor: Door = door || { position: occupant.position } as Door;
-    const pathA = buildCorridorToExitPath(dummyDoor, a, floor, hazards);
-    const pathB = buildCorridorToExitPath(dummyDoor, b, floor, hazards);
+    const path = buildCorridorToExitPath(dummyDoor, exit, floor, hazards);
 
-    const aTouches = pathA ? corridorTraversalTouchesHazard(pathA, hazards) : true;
-    const bTouches = pathB ? corridorTraversalTouchesHazard(pathB, hazards) : true;
-
-    if (aTouches !== bTouches) {
-      return aTouches ? 1 : -1; // Safe path ranked first!
+    if (!path) {
+      return { exit, cost: Infinity, touchesHazard: true, pathLen: Infinity, hazardDist: 0 };
     }
 
-    const distHazardA = pathA ? minDistanceToHazards(pathA, hazards) : Infinity;
-    const distHazardB = pathB ? minDistanceToHazards(pathB, hazards) : Infinity;
+    const touchesHazard = corridorTraversalTouchesHazard(path, hazards);
+    const hazardDist = minDistanceToHazards(path, hazards);
+    const rawPathLen = pathLength(path);
 
-    if (hazards.length > 0 && Math.abs(distHazardA - distHazardB) > 30) {
-      return distHazardB - distHazardA; // Farther from hazard is safer!
+    // Graph-based cost = path length + hazard penalty
+    let cost = rawPathLen;
+
+    if (touchesHazard) {
+      cost += HAZARD_PENALTY;
+    } else if (hazards.length > 0) {
+      cost -= hazardDist * 0.05;
     }
 
-    return distance(doorPos, a.position) - distance(doorPos, b.position);
+    // Ramp awareness: if path passes near a ramp, apply mobility bonus
+    if (floor.ramps && floor.ramps.length > 0) {
+      const ramp = floor.ramps[0];
+      const pathNearRamp = path.some(
+        (p) => distance(p, ramp.position) < 80
+      );
+      if (pathNearRamp) {
+        const rampBonus = mobilityEdgeCost("ramp", occupant.profile);
+        cost *= rampBonus;
+      }
+    }
+
+    return { exit, cost, touchesHazard, pathLen: rawPathLen, hazardDist };
   });
 
-  return ranked[0];
+  // Sort by total graph cost (lowest = best)
+  evaluated.sort((a, b) => a.cost - b.cost);
+
+  const best = evaluated[0];
+
+  // Per-occupant debug logging
+  console.log("[Routing] Occupant:", occupant.id);
+  console.log("  Start:", occupant.roomId, "@", occupant.position);
+  console.log("  Mobility:", occupant.profile);
+  console.log("  Available exits:", accessibleExits.map((e) => e.id));
+  for (const e of evaluated) {
+    console.log(
+      "  Route to", e.exit.id + ":",
+      "cost", e.cost.toFixed(1),
+      "| pathLen", e.pathLen === Infinity ? "\u221E" : e.pathLen.toFixed(1),
+      "| touchesHazard", e.touchesHazard,
+      "| hazardDist", e.hazardDist === Infinity ? "\u221E" : e.hazardDist.toFixed(1)
+    );
+  }
+  console.log("  \u2192 Selected exit:", best.exit.id, "(cost:", best.cost.toFixed(1) + ")");
+
+  return best.exit;
 }
 
 function findDoor(
@@ -297,18 +366,33 @@ function buildCorridorToExitPath(
   const isUpperFloor = (floor.floorLevel || 1) > 1;
   const corridorY = 330; // Centerline of main horizontal corridor (y = 280 to 380)
 
-  // Top/bottom door entry waypoints step perpendicularly out of the door into the corridor centerline
   const doorEntry = { x: door.position.x, y: corridorY };
-
-  // Corridor path to stair/exit junction along corridor centerline
   const exitJunction = { x: exit.position.x, y: corridorY };
 
-  // Primary direct corridor path
+  // If a ramp exists, route through it as intermediate waypoint
+  let rampWaypoint: Point | null = null;
+  if (floor.ramps && floor.ramps.length > 0) {
+    const ramp = floor.ramps[0];
+    if (!ramp.blocked) {
+      rampWaypoint = ramp.position;
+    }
+  }
+
   const directPath: Point[] = [
     door.position,
     doorEntry,
-    exitJunction,
   ];
+
+  // Insert ramp waypoint if it lies between door and exit
+  if (rampWaypoint) {
+    const minX = Math.min(door.position.x, exit.position.x);
+    const maxX = Math.max(door.position.x, exit.position.x);
+    if (rampWaypoint.x >= minX - 50 && rampWaypoint.x <= maxX + 50) {
+      directPath.push(rampWaypoint);
+    }
+  }
+
+  directPath.push(exitJunction);
 
   if (isUpperFloor) {
     directPath.push(exit.position);
@@ -482,18 +566,25 @@ export function calculateEvacuationRoute(
             : DEFAULT_SPEED;
 
   const isHazardActive = hazards.length > 0;
+  const routeConfidence = routeTouchesHazard(cleanPath, hazards) ? "medium" : "high";
+
+  console.log(
+    "[Routing] \u2192 Route assigned:",
+    occupant.id,
+    "\u2192 exit:", exit.id,
+    "| points:", cleanPath.length,
+    "| distance:", distanceTravelled.toFixed(1),
+    "| ETA:", (distanceTravelled / speed).toFixed(1) + "s",
+    "| confidence:", routeConfidence,
+    "| rerouted:", isHazardActive
+  );
 
   return {
     occupantId: occupant.id,
     path: cleanPath,
     eta: distanceTravelled / speed,
     exitId: exit.id,
-    confidence: routeTouchesHazard(
-      cleanPath,
-      hazards
-    )
-      ? "medium"
-      : "high",
+    confidence: routeConfidence,
     basis: "static_fallback",
     isRerouted: isHazardActive,
   };

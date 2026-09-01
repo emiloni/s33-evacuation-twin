@@ -1,5 +1,5 @@
 import React from "react";
-import type { Hazard, Occupant } from "@/lib/schema";
+import type { Hazard, Occupant, MobilityProfile } from "@/lib/schema";
 import Icons from "@/lib/icon-set";
 
 interface SimulationPanelProps {
@@ -12,6 +12,8 @@ interface SimulationPanelProps {
   onSelectBuilding?: (building: number) => void;
   onToggleSimulation: () => void;
   onToggleHazard?: () => void;
+  mobilityProfile?: MobilityProfile;
+  onMobilityProfileChange?: (profile: MobilityProfile) => void;
 }
 
 export default function SimulationPanel({
@@ -24,6 +26,8 @@ export default function SimulationPanel({
   onSelectBuilding,
   onToggleSimulation,
   onToggleHazard,
+  mobilityProfile = "normal",
+  onMobilityProfileChange,
 }: SimulationPanelProps) {
   const activeHazard = hazards.length > 0;
 
@@ -202,6 +206,38 @@ export default function SimulationPanel({
             label="Temporary Injuries"
             count={injuryCount}
           />
+        </div>
+      </div>
+
+      {/* MOBILITY PROFILE SELECTOR */}
+      <div>
+        <div className="mb-2 font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+          Evacuation Profile
+        </div>
+        <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3 shadow-xs">
+          <label className="font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+            Active Mobility Mode
+          </label>
+          <select
+            value={mobilityProfile}
+            onChange={(e) => onMobilityProfileChange?.(e.target.value as MobilityProfile)}
+            className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 font-mono text-xs font-bold text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
+          >
+            <option value="normal">🚶 Standard / Walking</option>
+            <option value="wheelchair">♿ Wheelchair User</option>
+            <option value="temporary_injury">🦯 Limited Mobility</option>
+            <option value="child">👶 Child / Assisted Evacuation</option>
+            <option value="elderly">👴 Elderly Occupant</option>
+            <option value="first_responder">🚨 First Responder</option>
+          </select>
+          <div className="mt-2 font-mono text-[10px] text-zinc-400">
+            {mobilityProfile === "wheelchair" && "Prefers ramps & accessible elevators. No stairs."}
+            {mobilityProfile === "temporary_injury" && "Prefers ramps. Stairs allowed but penalized."}
+            {mobilityProfile === "child" && "Assisted evacuation. Avoids high-risk routes."}
+            {mobilityProfile === "elderly" && "Slower pace. Prefers accessible routes."}
+            {mobilityProfile === "first_responder" && "All routes available. Higher speed."}
+            {mobilityProfile === "normal" && "Standard walking pace. All routes available."}
+          </div>
         </div>
       </div>
 
